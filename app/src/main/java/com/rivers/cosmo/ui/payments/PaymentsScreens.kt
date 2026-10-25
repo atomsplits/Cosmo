@@ -29,12 +29,18 @@ import java.util.Locale
 import java.util.TimeZone
 
 @Composable
-fun PaymentsScreen(state: WalletController.State, onCreatePayment: () -> Unit, modifier: Modifier = Modifier) {
+fun PaymentsScreen(
+    state: WalletController.State,
+    onCreatePayment: () -> Unit,
+    modifier: Modifier = Modifier,
+    billSplits: @Composable () -> Unit = {}
+) {
     FormColumn(modifier) {
         Text("Payments", style = MaterialTheme.typography.headlineMedium)
         Button(onClick = onCreatePayment, enabled = !state.keyMissing, modifier = Modifier.fillMaxWidth()) {
             Text("Create payment")
         }
+        billSplits()
         Text("Recent activity", style = MaterialTheme.typography.titleMedium)
         when {
             state.payments.isNotEmpty() -> state.payments.forEach { PaymentRow(it) }

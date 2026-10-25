@@ -1,6 +1,8 @@
 package com.rivers.cosmo.wallet
 
 import java.math.BigDecimal
+import com.rivers.cosmo.splits.BillSplit
+import com.rivers.cosmo.splits.SplitInvite
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -90,6 +92,15 @@ class WalletController(
         return result.recoverCatching { throw WalletException(describe(it), it) }
     }
 
+    /** Signs a bill split invite as the organizer, or returns null if this device doesn't have the wallet key. */
+    fun signInvite(split: BillSplit): SplitInvite.Signed? = keyPair?.let { SplitInvite.sign(split, it) }
+
+    /** A longer payment history (with memos) than the dashboard shows, for matching bill split payments. */
+    suspend fun paymentsForSplits(): List<PaymentRecord> {
+        val address = keyPair?.accountId ?: return emptyList()
+        return withContext(Dispatchers.IO) { client.recentPayments(address, limit = SPLIT_HISTORY) }
+    }
+
     fun close() {
         scope.cancel()
         client.close()
@@ -114,5 +125,6 @@ class WalletController(
 
     private companion object {
         const val REFRESH_INTERVAL_MS = 30_000L
+        const val SPLIT_HISTORY = 200 // the most Horizon returns in one page
     }
 }

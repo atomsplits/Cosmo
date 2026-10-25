@@ -52,7 +52,15 @@ fun SendForm(
     var confirming by rememberSaveable { mutableStateOf(false) }
 
     val xlm = balances.firstOrNull { it.isNative } ?: WalletBalance("XLM", null, BigDecimal.ZERO)
-    val selected = if (allowAssetChoice) balances.firstOrNull { key(it) == selectedKey } ?: xlm else xlm
+    val selected = when {
+        // A pre-filled request (e.g. a bill split share) names its asset; if the wallet doesn't hold
+        // it, the zero balance makes the form explain that it can't be paid.
+        prefill?.assetCode != null ->
+            balances.firstOrNull { it.code == prefill.assetCode && it.issuer == prefill.assetIssuer }
+                ?: WalletBalance(prefill.assetCode, prefill.assetIssuer, BigDecimal.ZERO)
+        allowAssetChoice -> balances.firstOrNull { key(it) == selectedKey } ?: xlm
+        else -> xlm
+    }
     val trimmedAddress = address.trim()
     val addressInvalid = trimmedAddress.isNotEmpty() && !StellarAddress.isValid(trimmedAddress)
     val parsedAmount = parseAmount(amount)
@@ -147,6 +155,13 @@ fun SendForm(
     }
 }
 
-data class PaymentPrefill(val address: String, val amount: String?, val memo: String?)
+data class PaymentPrefill(
+    val address: String,
+    val amount: String?,
+    val memo: String?,
+    /** Null means XLM (or the form's normal choice). */
+    val assetCode: String? = null,
+    val assetIssuer: String? = null
+)
 
 private fun key(balance: WalletBalance) = "${balance.code}:${balance.issuer.orEmpty()}"

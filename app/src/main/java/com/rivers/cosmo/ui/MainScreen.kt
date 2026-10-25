@@ -50,6 +50,11 @@ import com.rivers.cosmo.ui.components.PaymentPrefill
 import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
 import com.rivers.cosmo.plugins.PluginEffect
 import com.rivers.cosmo.plugins.PluginHost
+import com.rivers.cosmo.splits.SplitsController
+import com.rivers.cosmo.ui.splits.CreateSplitScreen
+import com.rivers.cosmo.ui.splits.JoinSplitScreen
+import com.rivers.cosmo.ui.splits.SplitDetailScreen
+import com.rivers.cosmo.ui.splits.SplitsSection
 import com.rivers.cosmo.plugins.WalletData
 import com.rivers.cosmo.ui.settings.SettingsScreen
 import com.rivers.cosmo.ui.transfers.TransfersScreen
@@ -70,6 +75,9 @@ private enum class MainTab(val label: String, val icon: ImageVector) {
     Settings("Settings", Icons.Filled.Settings)
 }
 
+private const val SPLIT_CREATE = "create"
+private const val SPLIT_JOIN = "join"
+
 /** The signed-in app: one screen per tab in the bottom navigation bar. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -79,6 +87,10 @@ fun MainScreen(
     chatService: ChatService,
     kyc: KycController,
     plugins: PluginHost,
+    splits: SplitsController,
+    /** Bill split invite links opened from outside the app (QR codes, shared links). */
+    incomingInvite: String?,
+    onInviteHandled: () -> Unit,
     layoutStore: DashboardLayoutStore,
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
@@ -93,6 +105,10 @@ fun MainScreen(
     val kycState by kyc.state.collectAsState()
     val pluginState by plugins.state.collectAsState()
     var paymentPrefill by remember { mutableStateOf<PaymentPrefill?>(null) }
+    val splitsState by splits.state.collectAsState()
+    // Which bill split screen the Payments tab shows: null (the list), "create", "join" or a split's ID.
+    var splitRoute by rememberSaveable { mutableStateOf<String?>(null) }
+    var joinLink by rememberSaveable { mutableStateOf<String?>(null) }
     var startingKyc by remember { mutableStateOf(false) }
     val sumsub = remember(kyc) { SumsubLauncher(tokenProvider = kyc::accessToken) }
     val activity = LocalContext.current.findActivity()
@@ -139,6 +155,20 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(incomingInvite) {
+        incomingInvite ?: return@LaunchedEffect
+        tab = MainTab.Payments
+        creatingPayment = false
+        joinLink = incomingInvite
+        splitRoute = SPLIT_JOIN
+        onInviteHandled()
+    }
+
+    // Keep bill split progress current while the Payments tab is open and as new payments arrive.
+    LaunchedEffect(tab, walletState.payments) {
+        if (tab == MainTab.Payments) splits.refresh()
+    }
+
     // Check verification status whenever Settings opens, e.g. after a review finished.
     LaunchedEffect(tab) {
         if (tab == MainTab.Settings) kyc.refresh()
@@ -158,9 +188,10 @@ fun MainScreen(
         }
     }
 
-    BackHandler(enabled = creatingPayment || openContactId != null || tab != MainTab.Wallet) {
+    BackHandler(enabled = creatingPayment || splitRoute != null || openContactId != null || tab != MainTab.Wallet) {
         when {
             creatingPayment -> creatingPayment = false
+            splitRoute != null -> splitRoute = null
             openContactId != null -> openContactId = null
             else -> tab = MainTab.Wallet
         }
@@ -178,6 +209,7 @@ fun MainScreen(
                             // Tapping the current tab again returns to its first screen.
                             if (tab == item) {
                                 creatingPayment = false
+                                splitRoute = null
                                 openContactId = null
                             }
                             tab = item
@@ -234,16 +266,76 @@ fun MainScreen(
                         },
                         modifier = modifier
                     ) }
-                } else {
-                    PaymentsScreen(
+                } else when (val route = splitRoute) {
+                    null -> PaymentsScreen(
                         state = walletState,
                         onCreatePayment = {
                             sendError = null
                             paymentPrefill = null
                             creatingPayment = true
                         },
+                        modifier = modifier,
+                        billSplits = {
+                            SplitsSection(
+                                state = splitsState,
+                                canCreate = walletState.address != null,
+                                onCreate = { splitRoute = SPLIT_CREATE },
+                                onOpen = { splitRoute = it },
+                                onOpenInvite = { link ->
+                                    joinLink = link
+                                    splitRoute = SPLIT_JOIN
+                                }
+                            )
+                        }
+                    )
+                    SPLIT_CREATE -> CreateSplitScreen(
+                        balances = walletState.balances,
+                        onCreate = { title, asset, shares ->
+                            splits.create(title, asset.code, asset.issuer, shares)
+                                .onSuccess { splitRoute = it.split.id }
+                                .onFailure { showMessage(it.message ?: "Couldn't create the split.") }
+                        },
+                        onBack = { splitRoute = null },
                         modifier = modifier
                     )
+                    SPLIT_JOIN -> JoinSplitScreen(
+                        link = joinLink.orEmpty(),
+                        onJoin = { share ->
+                            splits.join(joinLink.orEmpty(), share)
+                                .onSuccess { splitRoute = it.split.id }
+                                .onFailure { showMessage(it.message ?: "Couldn't join the split.") }
+                        },
+                        onBack = { splitRoute = null },
+                        modifier = modifier
+                    )
+                    else -> {
+                        val view = splitsState.splits.firstOrNull { it.split.id == route }
+                        if (view == null) {
+                            // The split was deleted (or never existed): go back to the list.
+                            LaunchedEffect(route) { splitRoute = null }
+                        } else {
+                            SplitDetailScreen(
+                                view = view,
+                                inviteLink = { share -> splits.inviteLink(view.entry, share) },
+                                onPay = { share ->
+                                    val split = view.split
+                                    val owed = split.shares[share].amount - (view.myStatus?.paid ?: BigDecimal.ZERO)
+                                    paymentPrefill = PaymentPrefill(split.organizerAddress, owed.toPlainString(), split.memoFor(share), split.assetCode, split.assetIssuer)
+                                    sendError = null
+                                    creatingPayment = true
+                                },
+                                onChooseShare = { share -> splits.chooseShare(view.split.id, share) },
+                                onRefresh = splits::refresh,
+                                onDelete = {
+                                    splits.delete(view.split.id)
+                                    splitRoute = null
+                                },
+                                onBack = { splitRoute = null },
+                                onMessage = ::showMessage,
+                                modifier = modifier
+                            )
+                        }
+                    }
                 }
             MainTab.Transfers -> key(transferFormKey) {
                 TransfersScreen(

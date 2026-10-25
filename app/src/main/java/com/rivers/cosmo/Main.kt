@@ -2,6 +2,7 @@ package com.rivers.cosmo
 
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.SystemBarStyle
@@ -13,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -26,6 +28,9 @@ import com.rivers.cosmo.auth.SeedPhrase
 import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.kyc.KycController
 import com.rivers.cosmo.plugins.PluginHost
+import com.rivers.cosmo.splits.SplitInvite
+import com.rivers.cosmo.splits.SplitsController
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.settings.SettingsStore
@@ -41,8 +46,12 @@ import com.rivers.cosmo.wallet.WalletController
 import com.rivers.cosmo.wallet.WalletKeyStore
 
 class Main : ComponentActivity() {
+    /** A bill split invite link the app was opened with, waiting to be shown. */
+    private val incomingInvite = MutableStateFlow<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        if (savedInstanceState == null) receive(intent)
         enableEdgeToEdge()
         val accountStore = AccountStore(applicationContext)
         val settingsStore = SettingsStore(applicationContext)
@@ -63,6 +72,7 @@ class Main : ComponentActivity() {
                 onDispose {}
             }
             CosmoTheme(darkTheme = darkTheme, fontFamily = settings.font.fontFamily, palette = palette) {
+                val invite by incomingInvite.collectAsState()
                 CosmoApp(
                     accountStore = accountStore,
                     seedPhrase = seedPhrase,
@@ -70,10 +80,23 @@ class Main : ComponentActivity() {
                     onSettingsChange = {
                         settings = it
                         settingsStore.save(it)
-                    }
+                    },
+                    incomingInvite = invite,
+                    onInviteHandled = { incomingInvite.value = null }
                 )
             }
         }
+    }
+
+    // The activity is singleTop, so links opened while the app is running arrive here.
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        receive(intent)
+    }
+
+    private fun receive(intent: Intent?) {
+        val link = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return
+        if (link.startsWith("${SplitInvite.SCHEME}://${SplitInvite.HOST}")) incomingInvite.value = link
     }
 }
 
@@ -84,7 +107,9 @@ fun CosmoApp(
     accountStore: AccountStore,
     seedPhrase: SeedPhrase,
     settings: AppSettings,
-    onSettingsChange: (AppSettings) -> Unit
+    onSettingsChange: (AppSettings) -> Unit,
+    incomingInvite: String? = null,
+    onInviteHandled: () -> Unit = {}
 ) {
     var userId by rememberSaveable { mutableStateOf(accountStore.currentUserId) }
     var screen by rememberSaveable { mutableStateOf(AuthScreen.Welcome) }
@@ -124,9 +149,17 @@ fun CosmoApp(
             onDispose { plugins.close() }
         }
         val layoutStore = remember { DashboardLayoutStore(context.applicationContext) }
+        val splits = remember(signedInUserId, wallet) { SplitsController(context.applicationContext, signedInUserId, wallet) }
+        DisposableEffect(splits) {
+            onDispose { splits.close() }
+        }
         MainScreen(
             userId = signedInUserId,
             plugins = plugins,
+            splits = splits,
+            // Invites wait until someone is signed in, then open on the Payments tab.
+            incomingInvite = incomingInvite,
+            onInviteHandled = onInviteHandled,
             layoutStore = layoutStore,
             wallet = wallet,
             chatService = chatService,

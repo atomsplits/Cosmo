@@ -20,6 +20,7 @@ import org.stellar.sdk.operations.CreateAccountOperation
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.RequestBuilder
 import org.stellar.sdk.responses.operations.CreateAccountOperationResponse
+import org.stellar.sdk.responses.operations.OperationResponse
 import org.stellar.sdk.responses.operations.PaymentOperationResponse
 
 enum class StellarNetwork(
@@ -56,7 +57,11 @@ data class PaymentRecord(
     val assetCode: String,
     /** ISO-8601, e.g. 2026-10-25T14:00:00Z. */
     val createdAt: String,
-    val transactionHash: String
+    val transactionHash: String,
+    /** Null for XLM. */
+    val assetIssuer: String? = null,
+    /** The transaction's text memo, if it had one. */
+    val memo: String? = null
 )
 
 /** A failure to show the user, already worded for them. */
@@ -91,7 +96,9 @@ class StellarClient(val network: StellarNetwork) : Closeable {
     /** The account's latest incoming and outgoing payments, newest first. */
     fun recentPayments(accountId: String, limit: Int = 20): List<PaymentRecord> = request {
         try {
-            server.payments().forAccount(accountId).order(RequestBuilder.Order.DESC).limit(limit).execute().records
+            server.payments().forAccount(accountId).order(RequestBuilder.Order.DESC).limit(limit)
+                .includeTransactions(true) // for memos, which bill splits use to match payments
+                .execute().records
                 .mapNotNull { operation ->
                     when (operation) {
                         is PaymentOperationResponse -> PaymentRecord(
@@ -101,7 +108,9 @@ class StellarClient(val network: StellarNetwork) : Closeable {
                             amount = BigDecimal(operation.amount),
                             assetCode = if (operation.assetType == NATIVE) "XLM" else operation.assetCode,
                             createdAt = operation.createdAt,
-                            transactionHash = operation.transactionHash
+                            transactionHash = operation.transactionHash,
+                            assetIssuer = if (operation.assetType == NATIVE) null else operation.assetIssuer,
+                            memo = textMemo(operation)
                         )
                         is CreateAccountOperationResponse -> PaymentRecord(
                             id = operation.id.toString(),
@@ -110,7 +119,8 @@ class StellarClient(val network: StellarNetwork) : Closeable {
                             amount = BigDecimal(operation.startingBalance),
                             assetCode = "XLM",
                             createdAt = operation.createdAt,
-                            transactionHash = operation.transactionHash
+                            transactionHash = operation.transactionHash,
+                            memo = textMemo(operation)
                         )
                         // Other kinds (path payments, account merges) aren't shown yet.
                         else -> null
@@ -121,6 +131,9 @@ class StellarClient(val network: StellarNetwork) : Closeable {
             emptyList()
         }
     }
+
+    private fun textMemo(operation: OperationResponse): String? =
+        operation.transaction?.takeIf { it.memoType == "text" }?.memoValue
 
     /** Asks the test network's Friendbot for free test XLM, which also activates the account. */
     fun fundWithFriendbot(accountId: String) {
