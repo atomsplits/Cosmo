@@ -1,6 +1,5 @@
 package com.rivers.cosmo.ui.theme
 
-import android.app.Activity
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
@@ -9,7 +8,9 @@ import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontFamily
 
 private val DarkColorScheme = darkColorScheme(
     primary = Purple80,
@@ -38,9 +39,14 @@ fun CosmoTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     // Dynamic color is available on Android 12+
     dynamicColor: Boolean = true,
+    fontFamily: FontFamily = FontFamily.Default,
+    // A fixed theme's colors; when set, they replace the dynamic and default colors.
+    palette: Palette? = null,
     content: @Composable () -> Unit
 ) {
     val colorScheme = when {
+        palette != null -> remember(palette) { palette.toColorScheme() }
+
         dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
             val context = LocalContext.current
             if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
@@ -52,7 +58,7 @@ fun CosmoTheme(
 
     MaterialTheme(
         colorScheme = colorScheme,
-        typography = Typography,
+        typography = remember(fontFamily) { typographyFor(fontFamily) },
         content = content
     )
 }
