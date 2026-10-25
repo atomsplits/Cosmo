@@ -13,7 +13,6 @@ import org.stellar.sdk.Server
 import org.stellar.sdk.Transaction
 import org.stellar.sdk.TransactionBuilder
 import org.stellar.sdk.TransactionBuilderAccount
-import org.stellar.sdk.exception.AccountNotFoundException
 import org.stellar.sdk.exception.AccountRequiresMemoException
 import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.exception.NetworkException
@@ -83,7 +82,8 @@ class StellarClient(val network: StellarNetwork) : Closeable {
                     }
                 }
             AccountState.Active(balances)
-        } catch (e: AccountNotFoundException) {
+        } catch (e: NetworkException) {
+            if (!isNotFound(e)) throw e
             AccountState.NotActivated
         }
     }
@@ -116,7 +116,8 @@ class StellarClient(val network: StellarNetwork) : Closeable {
                         else -> null
                     }
                 }
-        } catch (e: AccountNotFoundException) {
+        } catch (e: NetworkException) {
+            if (!isNotFound(e)) throw e
             emptyList()
         }
     }
@@ -137,7 +138,8 @@ class StellarClient(val network: StellarNetwork) : Closeable {
     fun send(keyPair: KeyPair, destination: String, balance: WalletBalance, amount: BigDecimal, memo: String?): String = request {
         val source = try {
             server.loadAccount(keyPair.accountId)
-        } catch (e: AccountNotFoundException) {
+        } catch (e: NetworkException) {
+            if (!isNotFound(e)) throw e
             throw WalletException("Your account isn't activated yet, so it can't send anything.")
         }
         val destinationExists = account(destination) is AccountState.Active
@@ -181,6 +183,13 @@ class StellarClient(val network: StellarNetwork) : Closeable {
         // network is busy, while costing a fraction of a cent.
         private const val BASE_FEE = 1_000L
         private const val TIMEOUT_SECONDS = 180L
+
+        /**
+         * Horizon answers 404 for accounts that don't exist yet (nobody has sent them XLM). The SDK
+         * reports that as a plain [BadRequestException] with code 404, not AccountNotFoundException,
+         * which only its Soroban client throws, so check the code instead of the exception type.
+         */
+        fun isNotFound(e: NetworkException): Boolean = e.code == 404
 
         /** Builds and signs a payment, or an account creation when [destinationExists] is false. */
         fun buildTransaction(

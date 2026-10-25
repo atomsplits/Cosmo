@@ -2,6 +2,7 @@ package com.rivers.cosmo.wallet
 
 import java.math.BigDecimal
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -9,6 +10,8 @@ import org.stellar.sdk.Account
 import org.stellar.sdk.MemoText
 import org.stellar.sdk.Network
 import org.stellar.sdk.Transaction
+import org.stellar.sdk.exception.AccountNotFoundException
+import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.operations.CreateAccountOperation
 import org.stellar.sdk.operations.PaymentOperation
 
@@ -65,5 +68,13 @@ class StellarClientTest {
     fun sendsOtherAssets() {
         val payment = build(balance = usdc).operations.single() as PaymentOperation
         assertEquals(usdc.asset, payment.asset)
+    }
+
+    @Test
+    fun treatsHorizon404AsAnAccountThatIsNotActivatedYet() {
+        // What Horizon's "Resource Missing" response becomes in the SDK.
+        assertTrue(StellarClient.isNotFound(BadRequestException(404, "{}", null, null)))
+        assertTrue(StellarClient.isNotFound(AccountNotFoundException(Wallet.DEMO_ADDRESS)))
+        assertFalse(StellarClient.isNotFound(BadRequestException(400, "{}", null, null)))
     }
 }
