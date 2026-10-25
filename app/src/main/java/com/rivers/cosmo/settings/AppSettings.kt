@@ -1,6 +1,7 @@
 package com.rivers.cosmo.settings
 
 import android.content.Context
+import com.rivers.cosmo.wallet.StellarNetwork
 
 enum class ThemeMode(val label: String) {
     System("System"),
@@ -50,13 +51,15 @@ data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.System,
     val font: AppFont = AppFont.Default,
     val customColors: CustomColors = CustomColors(),
-    val chatServerUrl: String = DEFAULT_CHAT_SERVER_URL
+    val chatServerUrl: String = DEFAULT_CHAT_SERVER_URL,
+    // The test network until the user deliberately switches to real money.
+    val stellarNetwork: StellarNetwork = StellarNetwork.Testnet
 )
 
 /** The Android emulator's address for the computer running it, where server/ runs by default. */
 const val DEFAULT_CHAT_SERVER_URL = "ws://10.0.2.2:8080/chat"
 
-/** Saves the user's appearance choices so they survive app restarts. */
+/** Saves the user's settings so they survive app restarts. */
 class SettingsStore(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -70,7 +73,8 @@ class SettingsStore(context: Context) {
                 text = prefs.getInt(KEY_CUSTOM_TEXT, defaults.text),
                 accent = prefs.getInt(KEY_CUSTOM_ACCENT, defaults.accent)
             ),
-            chatServerUrl = prefs.getString(KEY_CHAT_SERVER_URL, null) ?: DEFAULT_CHAT_SERVER_URL
+            chatServerUrl = prefs.getString(KEY_CHAT_SERVER_URL, null) ?: DEFAULT_CHAT_SERVER_URL,
+            stellarNetwork = enumOrDefault(prefs.getString(KEY_STELLAR_NETWORK, null), StellarNetwork.Testnet)
         )
     }
 
@@ -82,6 +86,7 @@ class SettingsStore(context: Context) {
             .putInt(KEY_CUSTOM_TEXT, settings.customColors.text)
             .putInt(KEY_CUSTOM_ACCENT, settings.customColors.accent)
             .putString(KEY_CHAT_SERVER_URL, settings.chatServerUrl)
+            .putString(KEY_STELLAR_NETWORK, settings.stellarNetwork.name)
             .apply()
     }
 
@@ -93,6 +98,7 @@ class SettingsStore(context: Context) {
         const val KEY_CUSTOM_TEXT = "custom_text"
         const val KEY_CUSTOM_ACCENT = "custom_accent"
         const val KEY_CHAT_SERVER_URL = "chat_server_url"
+        const val KEY_STELLAR_NETWORK = "stellar_network"
 
         inline fun <reified T : Enum<T>> enumOrDefault(name: String?, default: T): T =
             enumValues<T>().firstOrNull { it.name == name } ?: default

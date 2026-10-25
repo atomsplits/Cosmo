@@ -21,6 +21,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -37,8 +38,11 @@ import com.rivers.cosmo.ui.payments.PaymentsScreen
 import com.rivers.cosmo.ui.settings.SettingsScreen
 import com.rivers.cosmo.ui.transfers.TransfersScreen
 import com.rivers.cosmo.ui.wallet.WalletScreen
-import com.rivers.cosmo.wallet.Wallet
+import com.rivers.cosmo.wallet.WalletBalance
+import com.rivers.cosmo.wallet.WalletController
+import com.rivers.cosmo.wallet.formatAmount
 import com.rivers.cosmo.wallet.shortenAddress
+import java.math.BigDecimal
 import kotlinx.coroutines.launch
 
 private enum class MainTab(val label: String, val icon: ImageVector) {
@@ -49,16 +53,12 @@ private enum class MainTab(val label: String, val icon: ImageVector) {
     Settings("Settings", Icons.Filled.Settings)
 }
 
-// TODO: Payments and transfers aren't connected to the Stellar network yet,
-//  so for now submitting those forms only shows a message.
-private const val NOT_CONNECTED = "Cosmo isn't connected to the network yet."
-
 /** The signed-in app: one screen per tab in the bottom navigation bar. */
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun MainScreen(
     userId: String,
-    wallet: Wallet,
+    wallet: WalletController,
     chatService: ChatService,
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
@@ -69,10 +69,29 @@ fun MainScreen(
     var openContactId by rememberSaveable { mutableStateOf<String?>(null) }
     var openingChat by remember { mutableStateOf(false) }
     val chatState by chatService.state.collectAsState()
+    val walletState by wallet.state.collectAsState()
+    var sending by remember { mutableStateOf(false) }
+    var sendError by remember { mutableStateOf<String?>(null) }
+    // Bumped after each successful transfer so the form starts empty again.
+    var transferFormKey by rememberSaveable { mutableStateOf(0) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     fun showMessage(message: String) {
         scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+
+    fun send(address: String, balance: WalletBalance, amount: BigDecimal, memo: String?, onSent: () -> Unit) {
+        sending = true
+        sendError = null
+        scope.launch {
+            wallet.send(address, balance, amount, memo)
+                .onSuccess {
+                    onSent()
+                    showMessage("Sent ${formatAmount(amount, balance.code)} to ${shortenAddress(address)}.")
+                }
+                .onFailure { sendError = it.message }
+            sending = false
+        }
     }
 
     BackHandler(enabled = creatingPayment || openContactId != null || tab != MainTab.Wallet) {
@@ -98,6 +117,7 @@ fun MainScreen(
                                 openContactId = null
                             }
                             tab = item
+                            sendError = null
                         },
                         icon = { Icon(item.icon, contentDescription = null) },
                         label = { Text(item.label) }
@@ -112,24 +132,50 @@ fun MainScreen(
             // Lets screens that use imePadding() avoid counting the navigation bar twice.
             .consumeWindowInsets(innerPadding)
         when (tab) {
-            MainTab.Wallet -> WalletScreen(wallet = wallet, onLogOut = onLogOut, modifier = modifier)
+            MainTab.Wallet -> WalletScreen(
+                state = walletState,
+                onRefresh = wallet::refresh,
+                onFund = wallet::fundWithFriendbot,
+                onAddressCopied = { showMessage("Wallet address copied.") },
+                onLogOut = onLogOut,
+                modifier = modifier
+            )
             MainTab.Payments ->
                 if (creatingPayment) {
                     CreatePaymentScreen(
-                        onSubmit = { address, amount ->
-                            creatingPayment = false
-                            showMessage("Payment of ${amount.toPlainString()} XLM to ${shortenAddress(address)} not sent. $NOT_CONNECTED")
+                        state = walletState,
+                        sending = sending,
+                        error = sendError,
+                        onSubmit = { address, balance, amount, memo ->
+                            send(address, balance, amount, memo) { creatingPayment = false }
                         },
-                        onBack = { creatingPayment = false },
+                        onBack = {
+                            creatingPayment = false
+                            sendError = null
+                        },
                         modifier = modifier
                     )
                 } else {
-                    PaymentsScreen(onCreatePayment = { creatingPayment = true }, modifier = modifier)
+                    PaymentsScreen(
+                        state = walletState,
+                        onCreatePayment = {
+                            sendError = null
+                            creatingPayment = true
+                        },
+                        modifier = modifier
+                    )
                 }
-            MainTab.Transfers -> TransfersScreen(
-                onTransfer = { amount, crypto -> showMessage("Transfer of ${amount.toPlainString()} ${crypto.code} not sent. $NOT_CONNECTED") },
-                modifier = modifier
-            )
+            MainTab.Transfers -> key(transferFormKey) {
+                TransfersScreen(
+                    state = walletState,
+                    sending = sending,
+                    error = sendError,
+                    onTransfer = { address, balance, amount, memo ->
+                        send(address, balance, amount, memo) { transferFormKey++ }
+                    },
+                    modifier = modifier
+                )
+            }
             MainTab.Chat -> {
                 val conversation = openContactId?.let { chatState.conversations[it] }
                 if (conversation != null) {

@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Backup rules for Android 11 and older. See data_extraction_rules.xml for Android 12+. -->
 <full-backup-content>
-    <!-- Chat keys are encrypted with a key that never leaves this device's Android Keystore,
+    <!-- Chat and wallet keys are encrypted with a key that never leaves this device's Android Keystore,
          so a backed-up copy could never be decrypted on another device. -->
     <exclude domain="file" path="pgp/" />
+    <exclude domain="file" path="wallet/" />
 </full-backup-content>

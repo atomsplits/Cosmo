@@ -34,7 +34,8 @@ import com.rivers.cosmo.ui.auth.WelcomeScreen
 import com.rivers.cosmo.ui.theme.CosmoTheme
 import com.rivers.cosmo.ui.theme.fontFamily
 import com.rivers.cosmo.ui.theme.palette
-import com.rivers.cosmo.wallet.Wallet
+import com.rivers.cosmo.wallet.WalletController
+import com.rivers.cosmo.wallet.WalletKeyStore
 
 class Main : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -88,8 +89,18 @@ fun CosmoApp(
     // Developer shortcut: only offered in debug builds, never in the released app.
     val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
+    val walletKeys = remember { WalletKeyStore(context.applicationContext) }
+
     val signedInUserId = userId
     if (signedInUserId != null) {
+        // The wallet reloads when switching between the test and public Stellar networks.
+        val wallet = remember(signedInUserId, settings.stellarNetwork) {
+            WalletController(walletKeys, signedInUserId, settings.stellarNetwork)
+        }
+        DisposableEffect(wallet) {
+            wallet.start()
+            onDispose { wallet.close() }
+        }
         // One chat connection per signed-in user; it restarts if the chat server setting changes.
         val chatService = remember(signedInUserId, settings.chatServerUrl) {
             ChatService(context.applicationContext, signedInUserId, settings.chatServerUrl)
@@ -100,7 +111,7 @@ fun CosmoApp(
         }
         MainScreen(
             userId = signedInUserId,
-            wallet = Wallet.demo,
+            wallet = wallet,
             chatService = chatService,
             settings = settings,
             onSettingsChange = onSettingsChange,
@@ -115,9 +126,19 @@ fun CosmoApp(
             screen = screen,
             onScreenChange = { screen = it },
             accountStore = accountStore,
+            walletKeys = walletKeys,
             seedPhrase = seedPhrase,
             onSignedIn = { userId = it },
-            onDeveloperSkip = if (isDebuggable) ({ userId = accountStore.developerUserId() }) else null
+            onDeveloperSkip = if (isDebuggable) {
+                {
+                    // The developer account gets its own random wallet, kept on this device only.
+                    val developerId = accountStore.developerUserId()
+                    if (!walletKeys.contains(developerId)) walletKeys.save(developerId, seedPhrase.generate())
+                    userId = developerId
+                }
+            } else {
+                null
+            }
         )
     }
 }
@@ -127,6 +148,7 @@ private fun AuthFlow(
     screen: AuthScreen,
     onScreenChange: (AuthScreen) -> Unit,
     accountStore: AccountStore,
+    walletKeys: WalletKeyStore,
     seedPhrase: SeedPhrase,
     onSignedIn: (userId: String) -> Unit,
     onDeveloperSkip: (() -> Unit)?
@@ -148,6 +170,7 @@ private fun AuthFlow(
             )
             AuthScreen.SignUp -> SignUpScreen(
                 accountStore = accountStore,
+                walletKeys = walletKeys,
                 seedPhrase = seedPhrase,
                 onSignedUp = onSignedIn,
                 onBack = { onScreenChange(AuthScreen.Welcome) },
@@ -155,6 +178,7 @@ private fun AuthFlow(
             )
             AuthScreen.LogIn -> LogInScreen(
                 accountStore = accountStore,
+                walletKeys = walletKeys,
                 seedPhrase = seedPhrase,
                 onLoggedIn = onSignedIn,
                 onBack = { onScreenChange(AuthScreen.Welcome) },

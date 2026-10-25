@@ -6,15 +6,15 @@ import org.junit.Test
 
 class WalletTest {
     @Test
-    fun shortensId() {
-        assertEquals("GAAZ…CWN7", Wallet.demo.shortId)
-        assertEquals("GABC", Wallet("GABC", BigDecimal.ZERO).shortId)
+    fun shortensAddresses() {
+        assertEquals("GAAZ…CWN7", shortenAddress(Wallet.DEMO_ADDRESS))
+        assertEquals("GABC", shortenAddress("GABC"))
     }
 
     @Test
-    fun formatsBalance() {
-        assertEquals("1,250.50 XLM", Wallet.demo.formattedBalance)
-        assertEquals("0.00 XLM", Wallet("G", BigDecimal.ZERO).formattedBalance)
-        assertEquals("12.0000001 XLM", Wallet("G", BigDecimal("12.0000001")).formattedBalance)
+    fun formatsAmounts() {
+        assertEquals("1,250.50 XLM", formatAmount(BigDecimal("1250.5"), "XLM"))
+        assertEquals("0.00 XLM", formatAmount(BigDecimal.ZERO, "XLM"))
+        assertEquals("12.0000001 USDC", formatAmount(BigDecimal("12.0000001"), "USDC"))
     }
 }

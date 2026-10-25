@@ -36,8 +36,14 @@ android {
     }
     packaging {
         resources {
-            // Bouncy Castle's jars (used by PGPainless) each ship these files, which would clash.
-            excludes += setOf("META-INF/versions/9/OSGI-INF/MANIFEST.MF", "META-INF/versions/9/module-info.class")
+            // Several libraries (Bouncy Castle, Gson, commons-codec, SLF4J) ship these same paths,
+            // which would otherwise clash when packaged. None of them are needed at runtime.
+            excludes += setOf(
+                "/META-INF/versions/*/OSGI-INF/MANIFEST.MF",
+                "/META-INF/versions/9/module-info.class",
+                "/META-INF/LICENSE*",
+                "/META-INF/NOTICE*"
+            )
         }
     }
 }
@@ -56,6 +62,7 @@ dependencies {
     implementation(libs.androidx.compose.material.icons.extended)
     implementation(libs.pgpainless.core)
     implementation(libs.okhttp)
+    implementation(libs.stellar.sdk)
     testImplementation(libs.junit)
     // Android's built-in org.json only exists on devices, so local unit tests need the real library.
     testImplementation(libs.org.json)

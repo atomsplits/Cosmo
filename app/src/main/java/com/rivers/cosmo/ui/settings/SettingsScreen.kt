@@ -19,6 +19,7 @@ import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -52,6 +53,7 @@ import com.rivers.cosmo.ui.components.FormColumn
 import com.rivers.cosmo.ui.theme.Palette
 import com.rivers.cosmo.ui.theme.fontFamily
 import com.rivers.cosmo.ui.theme.previewPalette
+import com.rivers.cosmo.wallet.StellarNetwork
 
 @Composable
 fun SettingsScreen(
@@ -74,6 +76,12 @@ fun SettingsScreen(
                 onChange = { onSettingsChange(settings.copy(customColors = it)) }
             )
         }
+
+        Text("Stellar network", style = MaterialTheme.typography.titleMedium)
+        NetworkSelector(
+            selected = settings.stellarNetwork,
+            onSelected = { onSettingsChange(settings.copy(stellarNetwork = it)) }
+        )
 
         Text("Chat server", style = MaterialTheme.typography.titleMedium)
         ChatServerField(
@@ -272,5 +280,63 @@ private fun ChatServerField(url: String, onSave: (String) -> Unit) {
             Button(onClick = { onSave(trimmed) }, enabled = valid && trimmed != url) { Text("Save and reconnect") }
             TextButton(onClick = { draft = DEFAULT_CHAT_SERVER_URL }) { Text("Reset") }
         }
+    }
+}
+
+/** Switching to the public network moves real money, so it asks for confirmation first. */
+@Composable
+private fun NetworkSelector(selected: StellarNetwork, onSelected: (StellarNetwork) -> Unit) {
+    var confirmingPublic by rememberSaveable { mutableStateOf(false) }
+    Column(Modifier.selectableGroup()) {
+        StellarNetwork.entries.forEach { network ->
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .selectable(
+                        selected = network == selected,
+                        role = Role.RadioButton,
+                        onClick = {
+                            when {
+                                network == selected -> Unit
+                                network == StellarNetwork.Public -> confirmingPublic = true
+                                else -> onSelected(network)
+                            }
+                        }
+                    )
+                    .padding(vertical = 8.dp)
+            ) {
+                RadioButton(selected = network == selected, onClick = null)
+                Spacer(Modifier.width(12.dp))
+                Text(network.label)
+            }
+        }
+        Text(
+            "Your wallet address is the same on both networks, but balances are separate. " +
+                "Test XLM has no value.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+    }
+
+    if (confirmingPublic) {
+        AlertDialog(
+            onDismissRequest = { confirmingPublic = false },
+            title = { Text("Use real XLM?") },
+            text = {
+                Text(
+                    "On the public network, payments move real money and can't be reversed. Anyone " +
+                        "with your 12-word recovery phrase can take your funds, so keep it written down " +
+                        "somewhere safe and never share it."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    confirmingPublic = false
+                    onSelected(StellarNetwork.Public)
+                }) { Text("Switch to public network") }
+            },
+            dismissButton = { TextButton(onClick = { confirmingPublic = false }) { Text("Cancel") } }
+        )
     }
 }
