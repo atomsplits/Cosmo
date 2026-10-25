@@ -30,8 +30,9 @@ import com.rivers.cosmo.ui.MainScreen
 import com.rivers.cosmo.ui.auth.LogInScreen
 import com.rivers.cosmo.ui.auth.SignUpScreen
 import com.rivers.cosmo.ui.auth.WelcomeScreen
-import com.rivers.cosmo.ui.settings.fontFamily
 import com.rivers.cosmo.ui.theme.CosmoTheme
+import com.rivers.cosmo.ui.theme.fontFamily
+import com.rivers.cosmo.ui.theme.palette
 import com.rivers.cosmo.wallet.Wallet
 
 class Main : ComponentActivity() {
@@ -43,10 +44,12 @@ class Main : ComponentActivity() {
         val seedPhrase = SeedPhrase(assets.open(SeedPhrase.WORD_LIST_ASSET).bufferedReader().use { it.readLines() })
         setContent {
             var settings by remember { mutableStateOf(settingsStore.load()) }
-            val darkTheme = when (settings.themeMode) {
-                ThemeMode.System -> isSystemInDarkTheme()
-                ThemeMode.Light -> false
-                ThemeMode.Dark -> true
+            val palette = settings.themeMode.palette(settings.customColors)
+            val darkTheme = when {
+                palette != null -> palette.isDark
+                settings.themeMode == ThemeMode.Light -> false
+                settings.themeMode == ThemeMode.Dark -> true
+                else -> isSystemInDarkTheme()
             }
             // Keep the status bar and navigation bar icons readable when the theme is overridden.
             DisposableEffect(darkTheme) {
@@ -54,7 +57,7 @@ class Main : ComponentActivity() {
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
                 onDispose {}
             }
-            CosmoTheme(darkTheme = darkTheme, fontFamily = settings.font.fontFamily) {
+            CosmoTheme(darkTheme = darkTheme, fontFamily = settings.font.fontFamily, palette = palette) {
                 CosmoApp(
                     accountStore = accountStore,
                     seedPhrase = seedPhrase,
