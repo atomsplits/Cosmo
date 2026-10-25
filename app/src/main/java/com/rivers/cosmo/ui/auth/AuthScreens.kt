@@ -48,7 +48,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 @Composable
-fun WelcomeScreen(onSignUp: () -> Unit, onLogIn: () -> Unit, modifier: Modifier = Modifier) {
+fun WelcomeScreen(
+    onSignUp: () -> Unit,
+    onLogIn: () -> Unit,
+    modifier: Modifier = Modifier,
+    onSkip: (() -> Unit)? = null
+) {
     Column(
         modifier = modifier.padding(24.dp),
         verticalArrangement = Arrangement.Center,
@@ -68,6 +73,12 @@ fun WelcomeScreen(onSignUp: () -> Unit, onLogIn: () -> Unit, modifier: Modifier 
         Spacer(Modifier.height(12.dp))
         OutlinedButton(onClick = onLogIn, modifier = Modifier.fillMaxWidth()) {
             Text("Log in")
+        }
+        if (onSkip != null) {
+            Spacer(Modifier.height(12.dp))
+            TextButton(onClick = onSkip, modifier = Modifier.fillMaxWidth()) {
+                Text("Skip login (developer)")
+            }
         }
     }
 }
