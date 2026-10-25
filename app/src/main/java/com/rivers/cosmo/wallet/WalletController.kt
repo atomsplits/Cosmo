@@ -136,6 +136,44 @@ class WalletController(
         return result.recoverCatching { throw WalletException(describe(it), it) }
     }
 
+    /** The wallet's own address, for marketplace terms; null until the key has loaded. */
+    val accountId: String? get() = keyPair?.accountId
+
+    /** Buyer: opens and locks an escrow for [terms], returning the escrow address and the refund (as XDR). */
+    suspend fun fundEscrow(terms: EscrowTerms, escrow: KeyPair, alreadyOpened: Boolean): Result<Pair<String, String>> =
+        withSigner { signer ->
+            if (!alreadyOpened) client.openEscrow(signer, escrow, terms)
+            escrow.accountId to client.lockEscrow(signer, escrow, terms).toEnvelopeXdrBase64()
+        }
+
+    /** Seller: checks the escrow is locked as agreed, then collects the price. Returns the transaction hash. */
+    suspend fun releaseEscrow(escrowId: String, refundXdr: String, terms: EscrowTerms, preimage: ByteArray): Result<String> =
+        withSigner { signer ->
+            val state = client.escrowAccount(escrowId) ?: throw WalletException("The escrow account doesn't exist.")
+            val refund = runCatching { org.stellar.sdk.AbstractTransaction.fromEnvelopeXdr(refundXdr, client.network.passphrase) }
+                .getOrNull() as? org.stellar.sdk.Transaction ?: throw WalletException("The buyer's refund is damaged.")
+            Escrow.checkLocked(state, terms, refund, System.currentTimeMillis() / 1000)?.let { throw WalletException(it) }
+            client.releaseEscrow(signer, escrowId, terms, preimage)
+        }
+
+    suspend fun refundEscrow(refundXdr: String): Result<String> = withSigner { client.refundEscrow(refundXdr) }
+
+    suspend fun escrowAccount(escrowId: String): Result<Escrow.AccountState?> = io { client.escrowAccount(escrowId) }
+
+    suspend fun revealedKey(escrowId: String, terms: EscrowTerms, releaseHash: String?): Result<ByteArray?> =
+        io { client.revealedKey(escrowId, terms, releaseHash) }
+
+    private suspend fun <T> withSigner(block: (KeyPair) -> T): Result<T> {
+        val signer = keyPair ?: return Result.failure(WalletException("This device doesn't have your wallet key."))
+        val result = io { block(signer) }
+        refresh()
+        return result
+    }
+
+    private suspend fun <T> io(block: () -> T): Result<T> = withContext(Dispatchers.IO) {
+        runCatching(block).recoverCatching { throw WalletException(describe(it), it) }
+    }
+
     /** Signs a bill split invite as the organizer, or returns null if this device doesn't have the wallet key. */
     fun signInvite(split: BillSplit): SplitInvite.Signed? = keyPair?.let { SplitInvite.sign(split, it) }
 

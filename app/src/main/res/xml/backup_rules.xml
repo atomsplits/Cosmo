@@ -5,4 +5,5 @@
          so a backed-up copy could never be decrypted on another device. -->
     <exclude domain="file" path="pgp/" />
     <exclude domain="file" path="wallet/" />
+    <exclude domain="file" path="market/" />
 </full-backup-content>

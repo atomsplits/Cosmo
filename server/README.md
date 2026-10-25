@@ -67,3 +67,23 @@ JSON text frames over `ws://host:port/chat`. Every frame has a `type`.
 
 The app's side is `app/src/main/java/com/rivers/cosmo/chat/ChatProtocol.kt`; keep the two in step.
 
+## Marketplace
+
+Logged-in users can list digital goods for sale. The server only keeps the shop window (in
+memory for now; TODO: Supabase): the seller's Cosmo ID always comes from their login, never from
+the frame.
+
+| Direction | Frame |
+| --- | --- |
+| app → server | `{"type":"publish_listing","listing":{"id":"<uuid>","title":"…","description":"…","price":"12.5","sellerAddress":"G…","kind":"text"}}` |
+| app → server | `{"type":"unpublish_listing","id":"<uuid>"}` |
+| app → server | `{"type":"browse_listings","requestId":"<uuid>"}` |
+| server → app | `{"type":"listings","requestId":"<uuid>","listings":[{…,"sellerId":"COSMO-…","publishedAt":1761400000000}]}` |
+
+Problems with a listing come back as an `error` frame whose `id` is the listing's.
+
+The sale itself never goes through the server in readable form. Buyer and seller apps exchange
+their offer and payment details as ordinary end-to-end encrypted chat messages, and the payment is
+a hash- and time-locked escrow on Stellar (see `app/src/main/java/com/rivers/cosmo/wallet/Escrow.kt`).
+The relay allows messages up to 100 KB so a seller's goods (up to 48 KB) fit in one.
+

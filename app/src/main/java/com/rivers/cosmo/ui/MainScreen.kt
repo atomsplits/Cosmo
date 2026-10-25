@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material.icons.filled.AccountBalanceWallet
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,15 +36,20 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.anchor.CashOutController
+import com.rivers.cosmo.fonts.CustomFontStore
 import com.rivers.cosmo.kyc.KycController
+import com.rivers.cosmo.market.MarketplaceController
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.ui.chat.ChatScreen
 import com.rivers.cosmo.ui.chat.ConversationScreen
+import com.rivers.cosmo.ui.marketplace.MarketplaceScreen
 import com.rivers.cosmo.ui.motion.LocalMotion
 import com.rivers.cosmo.ui.motion.screenTransition
 import com.rivers.cosmo.ui.payments.CreatePaymentScreen
 import com.rivers.cosmo.ui.payments.PaymentsScreen
+import com.rivers.cosmo.ui.settings.CustomFontsSection
 import com.rivers.cosmo.ui.settings.KycSection
+import com.rivers.cosmo.ui.theme.LocalCustomFonts
 import com.rivers.cosmo.ui.settings.PluginsSection
 import com.rivers.cosmo.ui.plugins.pluginModules
 import com.rivers.cosmo.ui.components.PaymentPrefill
@@ -71,6 +77,7 @@ private enum class MainTab(val label: String, val icon: ImageVector) {
     Wallet("Wallet", Icons.Filled.AccountBalanceWallet),
     Payments("Payments", Icons.Filled.Payments),
     Transfers("Transfers", Icons.Filled.SwapHoriz),
+    Marketplace("Market", Icons.Filled.Storefront),
     Chat("Chat", Icons.AutoMirrored.Filled.Chat),
     Settings("Settings", Icons.Filled.Settings)
 }
@@ -89,6 +96,8 @@ fun MainScreen(
     chatService: ChatService,
     kyc: KycController,
     cashOut: CashOutController,
+    fontStore: CustomFontStore,
+    market: MarketplaceController,
     plugins: PluginHost,
     splits: SplitsController,
     /** Bill split invite links opened from outside the app (QR codes, shared links). */
@@ -117,8 +126,6 @@ fun MainScreen(
     val motion = LocalMotion.current
     var sending by remember { mutableStateOf(false) }
     var sendError by remember { mutableStateOf<String?>(null) }
-    // Bumped after each successful transfer so the form starts empty again.
-    var transferFormKey by rememberSaveable { mutableStateOf(0) }
     val snackbarHostState = remember { SnackbarHostState() }
     val scope = rememberCoroutineScope()
     fun showMessage(message: String) {
@@ -340,21 +347,21 @@ fun MainScreen(
                         }
                     }
                 }
-                MainTab.Transfers -> key(transferFormKey) {
-                    TransfersScreen(
-                        state = walletState,
-                        wallet = wallet,
-                        cashOut = cashOut,
-                        anchorDomains = settings.anchors.forNetwork(walletState.network),
-                        sending = sending,
-                        error = sendError,
-                        onTransfer = { address, balance, amount, memo ->
-                            send(address, balance, amount, memo) { transferFormKey++ }
-                        },
-                        onMessage = ::showMessage,
-                        modifier = modifier
-                    )
-                }
+                MainTab.Transfers -> TransfersScreen(
+                    state = walletState,
+                    wallet = wallet,
+                    cashOut = cashOut,
+                    anchorDomains = settings.anchors.forNetwork(walletState.network),
+                    onMessage = ::showMessage,
+                    modifier = modifier
+                )
+                MainTab.Marketplace -> MarketplaceScreen(
+                    market = market,
+                    userId = userId,
+                    network = walletState.network,
+                    onMessage = ::showMessage,
+                    modifier = modifier
+                )
                 MainTab.Chat -> AnimatedContent(targetState = openContactId, transitionSpec = { screenTransition(motion) }, label = "chat") { contactId ->
                     val conversation = contactId?.let { chatState.conversations[it] }
                     if (conversation != null) {
@@ -390,6 +397,16 @@ fun MainScreen(
                     onSettingsChange = onSettingsChange,
                     modifier = modifier,
                     identityVerification = kycSection,
+                    customFonts = {
+                        CustomFontsSection(
+                            store = fontStore,
+                            fonts = LocalCustomFonts.current,
+                            selectedId = settings.customFont,
+                            onSelect = { onSettingsChange(settings.copy(customFont = it.id)) },
+                            onRemoved = { removed -> if (settings.customFont == removed.id) onSettingsChange(settings.copy(customFont = null)) },
+                            onMessage = ::showMessage
+                        )
+                    },
                     plugins = {
                         PluginsSection(
                             plugins = pluginState.plugins,

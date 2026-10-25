@@ -31,6 +31,20 @@ sealed interface ClientFrame {
     @Serializable
     @SerialName("send")
     data class Send(val id: String, val to: String, val ciphertext: String) : ClientFrame
+
+    /** Lists (or updates) one of the logged-in user's marketplace items. */
+    @Serializable
+    @SerialName("publish_listing")
+    data class PublishListing(val listing: ListingDraft) : ClientFrame
+
+    @Serializable
+    @SerialName("unpublish_listing")
+    data class UnpublishListing(val id: String) : ClientFrame
+
+    /** Asks for the marketplace's listings; answered with a [ServerFrame.Listings] carrying the same [requestId]. */
+    @Serializable
+    @SerialName("browse_listings")
+    data class BrowseListings(val requestId: String) : ClientFrame
 }
 
 /** Frames the server sends. */
@@ -57,6 +71,10 @@ sealed interface ServerFrame {
     @Serializable
     @SerialName("sent")
     data class Sent(val id: String, val delivered: Boolean) : ServerFrame
+
+    @Serializable
+    @SerialName("listings")
+    data class Listings(val requestId: String, val listings: List<Listing>) : ServerFrame
 
     /** When [fatal] is true the server closes the connection after sending this. */
     @Serializable

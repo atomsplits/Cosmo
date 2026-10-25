@@ -32,6 +32,10 @@ class DeviceSecretStore(context: Context, directory: String) {
         check(temporary.renameTo(File(directory, name))) { "Couldn't save $name" }
     }
 
+    fun delete(name: String) {
+        File(directory, name).delete()
+    }
+
     private fun encrypt(plaintext: ByteArray): ByteArray {
         val cipher = Cipher.getInstance(TRANSFORMATION).apply { init(Cipher.ENCRYPT_MODE, wrappingKey()) }
         return cipher.iv + cipher.doFinal(plaintext)

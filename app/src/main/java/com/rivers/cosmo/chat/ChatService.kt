@@ -3,6 +3,8 @@ package com.rivers.cosmo.chat
 import android.content.Context
 import com.rivers.cosmo.chat.crypto.KeyVault
 import com.rivers.cosmo.chat.crypto.Pgp
+import com.rivers.cosmo.market.Listing
+import com.rivers.cosmo.market.MarketProtocol
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
@@ -13,8 +15,11 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -75,6 +80,11 @@ class ChatService(
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val client = OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS).build()
     private val pendingKeyRequests = ConcurrentHashMap<String, CompletableDeferred<String?>>()
+    private val pendingListings = ConcurrentHashMap<String, CompletableDeferred<List<Listing>>>()
+    private val _marketMessages = MutableSharedFlow<Pair<String, String>>(extraBufferCapacity = 64)
+
+    /** Marketplace messages from other users, as (sender's Cosmo ID, text). Only ones with a verified signature arrive. */
+    val marketMessages: SharedFlow<Pair<String, String>> = _marketMessages.asSharedFlow()
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
@@ -145,6 +155,37 @@ class ChatService(
         }
     }
 
+    // Marketplace: listings live on the Cosmo server; sale messages travel like chat messages but
+    // aren't shown in conversations.
+
+    fun publishListing(listing: Listing): Boolean = socket?.send(ChatProtocol.publishListing(listing)) == true
+
+    fun unpublishListing(id: String): Boolean = socket?.send(ChatProtocol.unpublishListing(id)) == true
+
+    suspend fun browseListings(): Result<List<Listing>> = runCatching {
+        val webSocket = socket ?: throw IllegalStateException("Not connected to the Cosmo server.")
+        val requestId = UUID.randomUUID().toString()
+        val request = CompletableDeferred<List<Listing>>().also { pendingListings[requestId] = it }
+        try {
+            webSocket.send(ChatProtocol.browseListings(requestId))
+            withTimeoutOrNull(KEY_REQUEST_TIMEOUT_MS) { request.await() } ?: throw IllegalStateException("The Cosmo server didn't answer.")
+        } finally {
+            pendingListings.remove(requestId)
+        }
+    }
+
+    /** Sends a marketplace message, encrypted and signed like chat, without adding it to a conversation. */
+    suspend fun sendMarket(contactId: String, text: String): Result<Unit> = runCatching {
+        val recipientKey = contacts.pinned(contactId) ?: run {
+            val armored = keyDirectory.fetch(contactId) ?: throw IllegalStateException("$contactId hasn't used Cosmo yet.")
+            (contacts.pin(contactId, armored) as? ContactKeys.PinResult.Trusted)?.publicKey
+                ?: throw IllegalStateException("$contactId's key changed. Check it in Chat before trading with them.")
+        }
+        val ciphertext = withContext(Dispatchers.Default) { Pgp.encryptAndSign(text, recipientKey, ownKey) }
+        val webSocket = socket ?: throw IllegalStateException("Not connected to the Cosmo server.")
+        check(webSocket.send(ChatProtocol.send(UUID.randomUUID().toString(), contactId, ciphertext))) { "Couldn't send to the Cosmo server." }
+    }
+
     private suspend fun connectLoop() {
         var backoffMs = INITIAL_BACKOFF_MS
         while (scope.isActive && !stopReconnecting) {
@@ -193,6 +234,7 @@ class ChatService(
                         _state.update { it.copy(connection = Connection.Online, error = null) }
                     }
                     is ChatProtocol.Incoming.Key -> pendingKeyRequests.remove(frame.userId)?.complete(frame.publicKey)
+                    is ChatProtocol.Incoming.Listings -> pendingListings[frame.requestId]?.complete(frame.listings)
                     // Decrypting may need to look up the sender's key, which arrives on this same
                     // connection, so it can't block this loop.
                     is ChatProtocol.Incoming.Message -> scope.launch { receive(frame) }
@@ -222,6 +264,11 @@ class ChatService(
 
         val decrypted = runCatching { Pgp.decryptAndVerify(frame.ciphertext, ownKey, senderKey) }.getOrElse {
             Pgp.Decrypted("This message couldn't be decrypted.", verified = false)
+        }
+        if (MarketProtocol.isMarket(decrypted.text)) {
+            // Sale terms must really come from who they claim to; unverified ones are dropped.
+            if (decrypted.verified) _marketMessages.emit(frame.from to decrypted.text)
+            return
         }
         _state.update {
             if (frame.from in it.conversations) {

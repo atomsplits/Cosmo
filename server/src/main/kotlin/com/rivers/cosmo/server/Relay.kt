@@ -22,6 +22,7 @@ import org.slf4j.LoggerFactory
 class Relay(
     /** The public key each Cosmo ID logged in with. */
     val registry: KeyRegistry = InMemoryKeyRegistry(),
+    private val marketplace: Marketplace = Marketplace(),
     private val clock: () -> Long = System::currentTimeMillis
 ) {
     private val log = LoggerFactory.getLogger(Relay::class.java)
@@ -44,6 +45,10 @@ class Relay(
                     is ClientFrame.GetKey -> session.sendFrame(ServerFrame.Key(parsed.userId, registry.get(parsed.userId)?.armoredPublicKey))
                     is ClientFrame.Send -> relay(userId, parsed, session)
                     is ClientFrame.Hello -> session.sendFrame(ServerFrame.Error("Already logged in."))
+                    is ClientFrame.PublishListing ->
+                        marketplace.publish(userId, parsed.listing)?.let { session.sendFrame(ServerFrame.Error(it, id = parsed.listing.id)) }
+                    is ClientFrame.UnpublishListing -> marketplace.unpublish(userId, parsed.id)
+                    is ClientFrame.BrowseListings -> session.sendFrame(ServerFrame.Listings(parsed.requestId.take(MAX_ID_LENGTH), marketplace.browse()))
                     null -> session.sendFrame(ServerFrame.Error("Unrecognised frame."))
                 }
             }
@@ -130,7 +135,8 @@ class Relay(
     private companion object {
         const val LOGIN_TIMEOUT_MS = 30_000L
         const val MAX_ID_LENGTH = 64
-        const val MAX_CIPHERTEXT_LENGTH = 64 * 1024
+        // Room for marketplace deliveries (up to 48 KB of goods, encrypted twice) as well as chat.
+        const val MAX_CIPHERTEXT_LENGTH = 100 * 1024
         const val MAX_QUEUED_PER_USER = 100
         const val MAX_CLOSE_REASON_LENGTH = 120 // Close reasons are limited to 123 bytes.
         const val PGP_MESSAGE_HEADER = "-----BEGIN PGP MESSAGE-----"

@@ -32,7 +32,9 @@ import com.rivers.cosmo.auth.AccountStore
 import com.rivers.cosmo.auth.SeedPhrase
 import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.anchor.CashOutController
+import com.rivers.cosmo.fonts.CustomFontStore
 import com.rivers.cosmo.kyc.KycController
+import com.rivers.cosmo.market.MarketplaceController
 import com.rivers.cosmo.plugins.PluginHost
 import com.rivers.cosmo.splits.SplitInvite
 import com.rivers.cosmo.splits.SplitsController
@@ -49,6 +51,7 @@ import com.rivers.cosmo.ui.background.AppBackground
 import com.rivers.cosmo.ui.motion.LocalMotion
 import com.rivers.cosmo.ui.motion.rememberMotion
 import com.rivers.cosmo.ui.theme.CosmoTheme
+import com.rivers.cosmo.ui.theme.LocalCustomFonts
 import com.rivers.cosmo.ui.theme.fontFamily
 import com.rivers.cosmo.ui.theme.palette
 import com.rivers.cosmo.wallet.WalletController
@@ -64,9 +67,12 @@ class Main : ComponentActivity() {
         enableEdgeToEdge()
         val accountStore = AccountStore(applicationContext)
         val settingsStore = SettingsStore(applicationContext)
+        val fontStore = CustomFontStore(applicationContext)
         val seedPhrase = SeedPhrase(assets.open(SeedPhrase.WORD_LIST_ASSET).bufferedReader().use { it.readLines() })
         setContent {
             var settings by remember { mutableStateOf(settingsStore.load()) }
+            val customFonts by fontStore.fonts.collectAsState()
+            val customFamily = settings.customFont?.let { id -> customFonts.firstOrNull { it.id == id }?.fontFamily }
             val palette = settings.themeMode.palette(settings.customColors)
             val darkTheme = when {
                 palette != null -> palette.isDark
@@ -80,20 +86,22 @@ class Main : ComponentActivity() {
                 enableEdgeToEdge(statusBarStyle = style, navigationBarStyle = style)
                 onDispose {}
             }
-            CosmoTheme(darkTheme = darkTheme, fontFamily = settings.font.fontFamily, palette = palette) {
+            CosmoTheme(darkTheme = darkTheme, fontFamily = customFamily ?: settings.font.fontFamily, palette = palette) {
                 val invite by incomingInvite.collectAsState()
                 // The background is drawn once behind everything; screens are transparent over it.
                 // With no opaque surface underneath, text would fall back to Compose's default black,
                 // so give everything the theme's text color.
                 CompositionLocalProvider(
                     LocalContentColor provides MaterialTheme.colorScheme.onBackground,
-                    LocalMotion provides rememberMotion(settings.motion)
+                    LocalMotion provides rememberMotion(settings.motion),
+                    LocalCustomFonts provides customFonts
                 ) {
                     Box(Modifier.fillMaxSize()) {
                         AppBackground(settings.background, Modifier.fillMaxSize())
                         CosmoApp(
                             accountStore = accountStore,
                             seedPhrase = seedPhrase,
+                            fontStore = fontStore,
                             settings = settings,
                             onSettingsChange = {
                                 settings = it
@@ -126,6 +134,7 @@ private enum class AuthScreen { Welcome, SignUp, LogIn }
 fun CosmoApp(
     accountStore: AccountStore,
     seedPhrase: SeedPhrase,
+    fontStore: CustomFontStore,
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
     incomingInvite: String? = null,
@@ -164,6 +173,13 @@ fun CosmoApp(
             onDispose { kyc.close() }
         }
         val cashOut = remember(wallet) { CashOutController(context.applicationContext, wallet, settings.stellarNetwork) }
+        // Runs whenever someone's signed in, so a seller's phone can deliver sales without the tab open.
+        val market = remember(wallet, chatService) {
+            MarketplaceController(context.applicationContext, signedInUserId, chatService, wallet, settings.stellarNetwork)
+        }
+        DisposableEffect(market) {
+            onDispose { market.close() }
+        }
         val plugins = remember(signedInUserId) { PluginHost(context.applicationContext) }
         DisposableEffect(plugins) {
             plugins.start()
@@ -186,6 +202,8 @@ fun CosmoApp(
             chatService = chatService,
             kyc = kyc,
             cashOut = cashOut,
+            fontStore = fontStore,
+            market = market,
             settings = settings,
             onSettingsChange = onSettingsChange,
             onLogOut = {

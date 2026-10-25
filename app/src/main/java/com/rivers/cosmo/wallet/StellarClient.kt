@@ -201,6 +201,74 @@ class StellarClient(val network: StellarNetwork) : Closeable {
         }
     }
 
+    // Marketplace escrow (see Escrow for how it works).
+
+    /** The escrow account as it is on the ledger, or null if it doesn't exist (not opened yet, or closed). */
+    fun escrowAccount(escrowId: String): Escrow.AccountState? = request {
+        try {
+            val account = server.accounts().account(escrowId)
+            Escrow.AccountState(
+                accountId = account.accountId,
+                sequence = account.sequenceNumber,
+                xlm = account.balances.firstOrNull { it.assetType == NATIVE }?.balance?.let(::BigDecimal) ?: BigDecimal.ZERO,
+                low = account.thresholds.lowThreshold,
+                medium = account.thresholds.medThreshold,
+                high = account.thresholds.highThreshold,
+                signers = account.signers.associate { it.key to it.weight }
+            )
+        } catch (e: NetworkException) {
+            if (!isNotFound(e)) throw e
+            null
+        }
+    }
+
+    /** Buyer, step 1: creates the escrow account and returns the transaction hash. */
+    fun openEscrow(buyer: KeyPair, escrow: KeyPair, terms: EscrowTerms): String = request {
+        val source = loadOwnAccount(buyer.accountId)
+        submit(Escrow.buildOpen(network, source, buyer, escrow, terms))
+    }
+
+    /** Buyer, step 2: locks the escrow and returns the pre-authorized refund to keep (and give the seller). */
+    fun lockEscrow(buyer: KeyPair, escrow: KeyPair, terms: EscrowTerms): Transaction = request {
+        val escrowState = escrowAccount(escrow.accountId) ?: throw WalletException("The escrow account wasn't created.")
+        val refund = Escrow.buildRefund(network, escrow.accountId, escrowState.sequence, terms)
+        // Already locked (an earlier attempt went through but its answer was lost): nothing to send.
+        if (escrowState.signers[org.stellar.sdk.StrKey.encodePreAuthTx(refund.hash())] == null) {
+            submit(Escrow.buildLock(network, loadOwnAccount(buyer.accountId), buyer, escrow, refund))
+        }
+        refund
+    }
+
+    /** Seller: collects the price, revealing the key to the goods, and returns the transaction hash. */
+    fun releaseEscrow(seller: KeyPair, escrowId: String, terms: EscrowTerms, preimage: ByteArray): String = request {
+        submit(Escrow.buildRelease(network, loadOwnAccount(seller.accountId), seller, escrowId, terms, preimage))
+    }
+
+    /** Buyer, after the deadline: submits the pre-authorized refund (it needs no signatures). */
+    fun refundEscrow(refundXdr: String): String = request {
+        val refund = org.stellar.sdk.AbstractTransaction.fromEnvelopeXdr(refundXdr, network.passphrase) as? Transaction
+            ?: throw WalletException("The saved refund is damaged.")
+        submit(refund)
+    }
+
+    /** The key the seller revealed when collecting payment from [escrowId], if they have. */
+    fun revealedKey(escrowId: String, terms: EscrowTerms, releaseHash: String?): ByteArray? = request {
+        val envelopes = buildList {
+            releaseHash?.let { hash -> runCatching { server.transactions().transaction(hash) }.getOrNull()?.let { add(it) } }
+            if (isEmpty()) {
+                addAll(server.transactions().forAccount(escrowId).order(RequestBuilder.Order.DESC).limit(ESCROW_HISTORY).execute().records)
+            }
+        }
+        envelopes.filter { it.successful == true }.firstNotNullOfOrNull { Escrow.preimage(it.envelopeXdr, network, terms.hashLock) }
+    }
+
+    private fun loadOwnAccount(accountId: String) = try {
+        server.loadAccount(accountId)
+    } catch (e: NetworkException) {
+        if (!isNotFound(e)) throw e
+        throw WalletException("Your account isn't activated yet.")
+    }
+
     /** All the issuers of tokens with this [code], most widely held first (Horizon's /assets). */
     fun issuersOf(code: String, limit: Int = 200): List<IssuedAsset> = request {
         server.assets().assetCode(code).limit(limit).execute().records
@@ -234,6 +302,7 @@ class StellarClient(val network: StellarNetwork) : Closeable {
 
     companion object {
         const val NATIVE = "native"
+        private const val ESCROW_HISTORY = 20
         private const val LIQUIDITY_POOL_SHARES = "liquidity_pool_shares"
 
         /** A new Stellar account must start with at least 1 XLM (two base reserves of 0.5 XLM). */

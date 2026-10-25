@@ -61,7 +61,9 @@ fun SettingsScreen(
     onSettingsChange: (AppSettings) -> Unit,
     modifier: Modifier = Modifier,
     identityVerification: @Composable () -> Unit = {},
-    plugins: @Composable () -> Unit = {}
+    plugins: @Composable () -> Unit = {},
+    /** The user's own fonts, listed under the built-in ones. */
+    customFonts: @Composable () -> Unit = {}
 ) {
     FormColumn(modifier) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
@@ -121,19 +123,20 @@ fun SettingsScreen(
                     modifier = Modifier
                         .fillMaxWidth()
                         .selectable(
-                            selected = font == settings.font,
+                            selected = font == settings.font && settings.customFont == null,
                             role = Role.RadioButton,
-                            onClick = { onSettingsChange(settings.copy(font = font)) }
+                            onClick = { onSettingsChange(settings.copy(font = font, customFont = null)) }
                         )
                         .padding(vertical = 8.dp)
                 ) {
-                    RadioButton(selected = font == settings.font, onClick = null)
+                    RadioButton(selected = font == settings.font && settings.customFont == null, onClick = null)
                     Spacer(Modifier.width(12.dp))
                     // Each font option is drawn in its own font, so it previews itself.
                     Text(font.label, fontFamily = font.fontFamily)
                 }
             }
         }
+        customFonts()
     }
 }
 

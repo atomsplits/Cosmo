@@ -139,6 +139,8 @@ data class CustomColors(
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.System,
     val font: AppFont = AppFont.Default,
+    /** A font the user added, by id; used instead of [font] when set. */
+    val customFont: String? = null,
     val customColors: CustomColors = CustomColors(),
     val chatServerUrl: String = DEFAULT_CHAT_SERVER_URL,
     // The test network until the user deliberately switches to real money.
@@ -161,6 +163,7 @@ class SettingsStore(context: Context) {
         return AppSettings(
             themeMode = enumOrDefault(prefs.getString(KEY_THEME, null), ThemeMode.System),
             font = enumOrDefault(prefs.getString(KEY_FONT, null), AppFont.Default),
+            customFont = prefs.getString(KEY_CUSTOM_FONT, null),
             customColors = CustomColors(
                 background = prefs.getInt(KEY_CUSTOM_BACKGROUND, defaults.background),
                 text = prefs.getInt(KEY_CUSTOM_TEXT, defaults.text),
@@ -203,6 +206,7 @@ class SettingsStore(context: Context) {
         prefs.edit()
             .putString(KEY_THEME, settings.themeMode.name)
             .putString(KEY_FONT, settings.font.name)
+            .putString(KEY_CUSTOM_FONT, settings.customFont)
             .putInt(KEY_CUSTOM_BACKGROUND, settings.customColors.background)
             .putInt(KEY_CUSTOM_TEXT, settings.customColors.text)
             .putInt(KEY_CUSTOM_ACCENT, settings.customColors.accent)
@@ -231,6 +235,7 @@ class SettingsStore(context: Context) {
         const val KEY_ANCHORS_PUBLIC = "anchors_public"
         const val KEY_THEME = "theme_mode"
         const val KEY_FONT = "font"
+        const val KEY_CUSTOM_FONT = "custom_font"
         const val KEY_CUSTOM_BACKGROUND = "custom_background"
         const val KEY_CUSTOM_TEXT = "custom_text"
         const val KEY_CUSTOM_ACCENT = "custom_accent"

@@ -13,32 +13,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import com.rivers.cosmo.anchor.CashOutController
-import com.rivers.cosmo.ui.components.SendForm
 import com.rivers.cosmo.ui.motion.LocalMotion
 import com.rivers.cosmo.ui.motion.screenTransition
-import com.rivers.cosmo.wallet.WalletBalance
 import com.rivers.cosmo.wallet.WalletController
-import java.math.BigDecimal
 
-private enum class TransferMode(val label: String) { Send("Send"), Trade("Trade"), CashOut("Cash out") }
+private enum class TransferMode(val label: String) { Trade("Trade"), CashOut("Cash out") }
 
-/**
- * Moving money: send any asset the account holds, trade between assets on Stellar's exchange, or
- * cash out to a bank through an anchor.
- */
+/** Converting money: trade between assets on Stellar's exchange, or cash out to a bank through an anchor. (Sending is in Payments.) */
 @Composable
 fun TransfersScreen(
     state: WalletController.State,
     wallet: WalletController,
     cashOut: CashOutController,
     anchorDomains: List<String>,
-    sending: Boolean,
-    error: String?,
-    onTransfer: (address: String, balance: WalletBalance, amount: BigDecimal, memo: String?) -> Unit,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var mode by rememberSaveable { mutableStateOf(TransferMode.Send) }
+    var mode by rememberSaveable { mutableStateOf(TransferMode.Trade) }
     val motion = LocalMotion.current
     Column(modifier) {
         TabRow(selectedTabIndex = mode.ordinal) {
@@ -54,16 +45,6 @@ fun TransfersScreen(
         ) { shown ->
             val content = Modifier.fillMaxWidth()
             when (shown) {
-                TransferMode.Send -> SendForm(
-                    title = "Send",
-                    balances = state.balances,
-                    allowAssetChoice = true,
-                    network = state.network,
-                    sending = sending,
-                    error = error,
-                    onSubmit = onTransfer,
-                    modifier = content
-                )
                 TransferMode.Trade -> TradeScreen(
                     balances = state.balances,
                     network = state.network,

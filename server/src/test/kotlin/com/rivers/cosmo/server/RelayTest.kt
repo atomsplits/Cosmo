@@ -96,6 +96,31 @@ class RelayTest {
         assertNull(assertIs<ServerFrame.Key>(aliceSession.receive()).publicKey)
     }
 
+    @Test
+    fun listsMarketplaceItemsUnderTheSellersLogin() = relayTest { client ->
+        val address = "GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN7"
+        val aliceSession = client.logIn(aliceId, alice)
+        aliceSession.sendClient(ClientFrame.PublishListing(ListingDraft("l1", "Wallpaper pack", "4K", "12.50", address, "file")))
+        aliceSession.sendClient(ClientFrame.PublishListing(ListingDraft("l2", "", "no title", "1", address, "text")))
+        assertEquals("Titles need 1 to 80 characters.", assertIs<ServerFrame.Error>(aliceSession.receive()).message)
+
+        val bobSession = client.logIn(bobId, bob)
+        // Bob can't take over or remove Alice's listing.
+        bobSession.sendClient(ClientFrame.PublishListing(ListingDraft("l1", "Mine now", "", "1", address, "text")))
+        assertEquals("That listing ID is taken.", assertIs<ServerFrame.Error>(bobSession.receive()).message)
+        bobSession.sendClient(ClientFrame.UnpublishListing("l1"))
+        bobSession.sendClient(ClientFrame.BrowseListings("r1"))
+        val listings = assertIs<ServerFrame.Listings>(bobSession.receive())
+        assertEquals("r1", listings.requestId)
+        val listing = listings.listings.single()
+        assertEquals(aliceId, listing.sellerId) // from the login, not from the draft
+        assertEquals("12.5", listing.price)
+
+        aliceSession.sendClient(ClientFrame.UnpublishListing("l1"))
+        aliceSession.sendClient(ClientFrame.BrowseListings("r2"))
+        assertTrue(assertIs<ServerFrame.Listings>(aliceSession.receive()).listings.isEmpty())
+    }
+
     private val relay = Relay()
 
     private fun relayTest(block: suspend ApplicationTestBuilder.(HttpClient) -> Unit) = testApplication {

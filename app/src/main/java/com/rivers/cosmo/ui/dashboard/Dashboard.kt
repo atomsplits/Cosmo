@@ -58,7 +58,9 @@ import com.rivers.cosmo.settings.AppFont
 import com.rivers.cosmo.ui.motion.LocalMotion
 import com.rivers.cosmo.ui.motion.animatePlacement
 import com.rivers.cosmo.ui.motion.entrance
+import com.rivers.cosmo.ui.theme.LocalCustomFonts
 import com.rivers.cosmo.ui.theme.fontFamily
+import com.rivers.cosmo.ui.theme.fontFamilyFor
 import com.rivers.cosmo.ui.theme.typographyFor
 import kotlin.math.roundToInt
 
@@ -167,8 +169,8 @@ fun Dashboard(
                         },
                         onScale = { step -> current(id).let { commit(id, it.copy(scale = it.scale + step)) } },
                         onHide = { onLayoutChange(layout.hide(id)) },
-                        font = layout.fonts[id]?.let { name -> AppFont.entries.firstOrNull { it.name == name } },
-                        onFontChange = { font -> onLayoutChange(layout.setFont(id, font?.name)) }
+                        font = layout.fonts[id],
+                        onFontChange = { key -> onLayoutChange(layout.setFont(id, key)) }
                     ) }
                 }
             }
@@ -250,9 +252,9 @@ private fun ModuleFrame(
     module: DashboardModule,
     modifier: Modifier,
     scale: Float,
-    /** This module's own font, or null to use the app's font. */
-    font: AppFont?,
-    onFontChange: (AppFont?) -> Unit,
+    /** This module's own font as a font key (see FontKeys), or null to use the app's font. */
+    font: String?,
+    onFontChange: (String?) -> Unit,
     editing: Boolean,
     onDrag: (Offset) -> Unit,
     onDragEnd: () -> Unit,
@@ -418,21 +420,24 @@ fun DashboardToolbar(
     }
 }
 
-/** Draws [content] with every text style in [font], or unchanged when [font] is null. */
+/** Draws [content] with every text style in [font], or unchanged when it's null or no longer exists. */
 @Composable
-private fun WithFont(font: AppFont?, content: @Composable () -> Unit) {
-    if (font == null) {
+private fun WithFont(font: String?, content: @Composable () -> Unit) {
+    val customFonts = LocalCustomFonts.current
+    val family = font?.let { fontFamilyFor(it, customFonts) }
+    if (family == null) {
         content()
         return
     }
-    val typography = remember(font) { typographyFor(font.fontFamily) }
+    val typography = remember(family) { typographyFor(family) }
     MaterialTheme(colorScheme = MaterialTheme.colorScheme, shapes = MaterialTheme.shapes, typography = typography, content = content)
 }
 
 /** The "Aa" button in a module's edit toolbar: picks a font for just that module. */
 @Composable
-private fun FontPicker(title: String, font: AppFont?, onFontChange: (AppFont?) -> Unit) {
+private fun FontPicker(title: String, font: String?, onFontChange: (String?) -> Unit) {
     var open by remember { mutableStateOf(false) }
+    val customFonts = LocalCustomFonts.current
     Box {
         IconButton(onClick = { open = true }, modifier = Modifier.size(32.dp)) {
             Icon(Icons.Filled.TextFields, contentDescription = "Font for $title")
@@ -445,8 +450,14 @@ private fun FontPicker(title: String, font: AppFont?, onFontChange: (AppFont?) -
             AppFont.entries.forEach { option ->
                 DropdownMenuItem(
                     // Each option is shown in its own font so it previews itself.
-                    text = { Text(option.label + if (option == font) "  ✓" else "", fontFamily = option.fontFamily) },
-                    onClick = { onFontChange(option); open = false }
+                    text = { Text(option.label + if (option.name == font) "  ✓" else "", fontFamily = option.fontFamily) },
+                    onClick = { onFontChange(option.name); open = false }
+                )
+            }
+            customFonts.forEach { option ->
+                DropdownMenuItem(
+                    text = { Text(option.name + if (option.key == font) "  ✓" else "", fontFamily = option.fontFamily) },
+                    onClick = { onFontChange(option.key); open = false }
                 )
             }
         }

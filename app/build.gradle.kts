@@ -65,6 +65,8 @@ dependencies {
     implementation(libs.stellar.sdk)
     // Reads anchors' stellar.toml files. The Stellar SDK already uses it, but only at runtime.
     implementation(libs.toml4j)
+    // Decompresses .woff2 fonts users add in Settings.
+    implementation(libs.brotli.dec)
     implementation(libs.rhino)
     implementation(libs.zxing.core)
     testImplementation(libs.junit)

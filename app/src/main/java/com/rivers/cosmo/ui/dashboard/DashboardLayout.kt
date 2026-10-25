@@ -40,7 +40,7 @@ data class DashboardLayout(
     val placements: Map<String, ModulePlacement> = emptyMap(),
     val hidden: Set<String> = emptySet(),
     val order: List<String> = emptyList(),
-    /** A font for individual modules, by AppFont name; modules not listed use the app's font. */
+    /** A font for individual modules, by font key (an AppFont name or "custom:<id>"); others use the app's font. */
     val fonts: Map<String, String> = emptyMap()
 ) {
     fun place(id: String, placement: ModulePlacement): DashboardLayout =
