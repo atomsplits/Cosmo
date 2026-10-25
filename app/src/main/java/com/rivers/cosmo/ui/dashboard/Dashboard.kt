@@ -86,6 +86,8 @@ fun Dashboard(
     val widthDeltas = remember { mutableStateMapOf<String, Float>() }
     // Where auto-stacked modules ended up, so dragging one starts from where it's drawn.
     val autoPlacements = remember { HashMap<String, ModulePlacement>() }
+    // The one module being dragged or resized; other touches are ignored until it's released.
+    var activeGesture by remember { mutableStateOf<String?>(null) }
     val visible = modules.filterNot { it.id in layout.hidden }
     val drawOrder = layout.drawingOrder(visible.map { it.id })
     val byId = visible.associateBy { it.id }
@@ -98,7 +100,20 @@ fun Dashboard(
         fun commit(id: String, placement: ModulePlacement) {
             dragOffsets.remove(id)
             widthDeltas.remove(id)
-            onLayoutChange(layout.place(id, placement.normalized(canvasWidthDp)))
+            val drawnAt = visible.associate { it.id to current(it.id) }
+            onLayoutChange(layout.pinAll(drawnAt).place(id, placement.normalized(canvasWidthDp)))
+        }
+
+        /** Claims the gesture for [id], or returns false if another module is already being moved. */
+        fun claim(id: String): Boolean {
+            if (activeGesture == null) activeGesture = id
+            return activeGesture == id
+        }
+
+        fun release(id: String): Boolean {
+            if (activeGesture != id) return false
+            activeGesture = null
+            return true
         }
 
         Layout(
@@ -110,14 +125,16 @@ fun Dashboard(
                         module = module,
                         scale = current(id).scale,
                         editing = editing,
-                        onDrag = { delta -> dragOffsets[id] = (dragOffsets[id] ?: Offset.Zero) + delta },
+                        onDrag = { delta -> if (claim(id)) dragOffsets[id] = (dragOffsets[id] ?: Offset.Zero) + delta },
                         onDragEnd = {
+                            if (!release(id)) return@ModuleFrame
                             val offset = dragOffsets[id] ?: Offset.Zero
                             val start = current(id)
                             commit(id, start.copy(x = start.x + offset.x / canvasWidthPx, y = start.y + with(density) { offset.y.toDp().value }))
                         },
-                        onResize = { dx -> widthDeltas[id] = (widthDeltas[id] ?: 0f) + dx },
+                        onResize = { dx -> if (claim(id)) widthDeltas[id] = (widthDeltas[id] ?: 0f) + dx },
                         onResizeEnd = {
+                            if (!release(id)) return@ModuleFrame
                             val start = current(id)
                             commit(id, start.copy(width = start.width + (widthDeltas[id] ?: 0f) / canvasWidthPx))
                         },

@@ -85,6 +85,9 @@ fun SettingsScreen(
             )
         }
 
+        Text("Banner", style = MaterialTheme.typography.titleMedium)
+        BannerSection(banner = settings.banner, onChange = { onSettingsChange(settings.copy(banner = it)) })
+
         Text("Stellar network", style = MaterialTheme.typography.titleMedium)
         NetworkSelector(
             selected = settings.stellarNetwork,

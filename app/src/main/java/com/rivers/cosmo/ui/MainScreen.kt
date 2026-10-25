@@ -209,6 +209,8 @@ fun MainScreen(
                     onLogOut = onLogOut
                 ) + pluginModules(pluginState.widgets, onClick = plugins::click),
                 layoutStore = layoutStore,
+                banner = settings.banner,
+                network = walletState.network,
                 modifier = modifier
             )
             MainTab.Payments ->

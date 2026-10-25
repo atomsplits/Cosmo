@@ -44,4 +44,19 @@ class DashboardLayoutTest {
         assertEquals(DashboardLayout(), DashboardLayout.fromJson("not json"))
         assertEquals(DashboardLayout(), DashboardLayout.fromJson(null))
     }
+
+    @Test
+    fun movingOneModuleLeavesTheOthersWhereTheyWere() {
+        // "a" was placed by the user; "b" and "c" are auto-stacked where the dashboard drew them.
+        val layout = DashboardLayout().place("a", ModulePlacement(0f, 0f, 1f))
+        val drawn = mapOf(
+            "a" to ModulePlacement(0.5f, 999f, 1f), // ignored: the saved placement wins
+            "b" to ModulePlacement(0f, 120f, 1f),
+            "c" to ModulePlacement(0f, 240f, 1f)
+        )
+        val moved = layout.pinAll(drawn).place("b", ModulePlacement(0f, 600f, 1f))
+        assertEquals(ModulePlacement(0f, 0f, 1f), moved.placements["a"])
+        assertEquals(ModulePlacement(0f, 600f, 1f), moved.placements["b"])
+        assertEquals(ModulePlacement(0f, 240f, 1f), moved.placements["c"]) // didn't jump below "b"
+    }
 }

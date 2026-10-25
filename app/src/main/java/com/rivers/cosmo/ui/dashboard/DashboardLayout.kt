@@ -44,6 +44,14 @@ data class DashboardLayout(
     fun place(id: String, placement: ModulePlacement): DashboardLayout =
         copy(placements = placements + (id to placement), order = order - id + id)
 
+    /**
+     * Saves where every module in [drawnAt] is currently drawn, keeping existing placements. Called
+     * before moving one module: otherwise the auto-stacked modules would re-stack around its new
+     * spot and appear to move along with it.
+     */
+    fun pinAll(drawnAt: Map<String, ModulePlacement>): DashboardLayout =
+        copy(placements = drawnAt.filterKeys { it !in hidden } + placements)
+
     fun hide(id: String) = copy(hidden = hidden + id, placements = placements - id, order = order - id)
 
     fun show(id: String) = copy(hidden = hidden - id)

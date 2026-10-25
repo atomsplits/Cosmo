@@ -40,6 +40,26 @@ enum class AppFont(val label: String) {
     Cursive("Cursive")
 }
 
+/** The animated banner at the top of the Wallet tab. */
+enum class BannerStyle(val label: String) {
+    Off("Off"),
+    Gradient("Gradient"),
+    Topographic("Topographic"),
+    Clouds("Clouds"),
+    Fire("Fire"),
+    Aurora("Aurora"),
+    Waves("Waves"),
+    Stars("Stars")
+}
+
+data class BannerSettings(
+    val style: BannerStyle = BannerStyle.Aurora,
+    /** True to color the banner from the current theme's accent; false to use [color]. */
+    val matchTheme: Boolean = true,
+    val color: Int = 0xFF7C4DFF.toInt(),
+    val animated: Boolean = true
+)
+
 /** The colors of the user's custom theme, as opaque ARGB ints. */
 data class CustomColors(
     val background: Int = 0xFF101418.toInt(),
@@ -53,7 +73,8 @@ data class AppSettings(
     val customColors: CustomColors = CustomColors(),
     val chatServerUrl: String = DEFAULT_CHAT_SERVER_URL,
     // The test network until the user deliberately switches to real money.
-    val stellarNetwork: StellarNetwork = StellarNetwork.Testnet
+    val stellarNetwork: StellarNetwork = StellarNetwork.Testnet,
+    val banner: BannerSettings = BannerSettings()
 )
 
 /** The Android emulator's address for the computer running it, where server/ runs by default. */
@@ -74,7 +95,15 @@ class SettingsStore(context: Context) {
                 accent = prefs.getInt(KEY_CUSTOM_ACCENT, defaults.accent)
             ),
             chatServerUrl = prefs.getString(KEY_CHAT_SERVER_URL, null) ?: DEFAULT_CHAT_SERVER_URL,
-            stellarNetwork = enumOrDefault(prefs.getString(KEY_STELLAR_NETWORK, null), StellarNetwork.Testnet)
+            stellarNetwork = enumOrDefault(prefs.getString(KEY_STELLAR_NETWORK, null), StellarNetwork.Testnet),
+            banner = BannerSettings().let { default ->
+                BannerSettings(
+                    style = enumOrDefault(prefs.getString(KEY_BANNER_STYLE, null), default.style),
+                    matchTheme = prefs.getBoolean(KEY_BANNER_MATCH_THEME, default.matchTheme),
+                    color = prefs.getInt(KEY_BANNER_COLOR, default.color),
+                    animated = prefs.getBoolean(KEY_BANNER_ANIMATED, default.animated)
+                )
+            }
         )
     }
 
@@ -87,6 +116,10 @@ class SettingsStore(context: Context) {
             .putInt(KEY_CUSTOM_ACCENT, settings.customColors.accent)
             .putString(KEY_CHAT_SERVER_URL, settings.chatServerUrl)
             .putString(KEY_STELLAR_NETWORK, settings.stellarNetwork.name)
+            .putString(KEY_BANNER_STYLE, settings.banner.style.name)
+            .putBoolean(KEY_BANNER_MATCH_THEME, settings.banner.matchTheme)
+            .putInt(KEY_BANNER_COLOR, settings.banner.color)
+            .putBoolean(KEY_BANNER_ANIMATED, settings.banner.animated)
             .apply()
     }
 
@@ -99,6 +132,10 @@ class SettingsStore(context: Context) {
         const val KEY_CUSTOM_ACCENT = "custom_accent"
         const val KEY_CHAT_SERVER_URL = "chat_server_url"
         const val KEY_STELLAR_NETWORK = "stellar_network"
+        const val KEY_BANNER_STYLE = "banner_style"
+        const val KEY_BANNER_MATCH_THEME = "banner_match_theme"
+        const val KEY_BANNER_COLOR = "banner_color"
+        const val KEY_BANNER_ANIMATED = "banner_animated"
 
         inline fun <reified T : Enum<T>> enumOrDefault(name: String?, default: T): T =
             enumValues<T>().firstOrNull { it.name == name } ?: default
