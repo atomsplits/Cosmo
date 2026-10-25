@@ -69,4 +69,39 @@ class DashboardLayoutTest {
         // Layouts saved before per-module fonts existed still load.
         assertEquals(emptyMap<String, String>(), DashboardLayout.fromJson("""{"placements":{},"hidden":[],"order":[]}""").fonts)
     }
+
+    @Test
+    fun compactionClosesGaps() {
+        // Three full-width modules with a big hole between the first and second.
+        val y = compact(
+            listOf(
+                LayoutBox("a", x = 0, width = 100, order = 0f, height = 50),
+                LayoutBox("b", x = 0, width = 100, order = 500f, height = 30),
+                LayoutBox("c", x = 0, width = 100, order = 900f, height = 20)
+            ),
+            gap = 10
+        )
+        assertEquals(mapOf("a" to 0, "b" to 60, "c" to 100), y)
+    }
+
+    @Test
+    fun sideBySideModulesShareARow() {
+        val y = compact(
+            listOf(
+                LayoutBox("left", x = 0, width = 50, order = 0f, height = 40),
+                LayoutBox("right", x = 50, width = 50, order = 10f, height = 80),
+                LayoutBox("below", x = 0, width = 100, order = 20f, height = 10)
+            ),
+            gap = 0
+        )
+        assertEquals(0, y["left"])
+        assertEquals(0, y["right"]) // fits next to "left"
+        assertEquals(80, y["below"]) // full width, so it goes under the taller of the two
+    }
+
+    @Test
+    fun orderDecidesWhoGoesFirst() {
+        val boxes = listOf(LayoutBox("a", 0, 100, order = 100f, height = 10), LayoutBox("b", 0, 100, order = 5f, height = 10))
+        assertEquals(mapOf("b" to 0, "a" to 10), compact(boxes, gap = 0))
+    }
 }

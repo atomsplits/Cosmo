@@ -90,8 +90,10 @@ fun Dashboard(
     // Live gesture offsets in px, applied on top of the saved placement until the gesture ends.
     val dragOffsets = remember { mutableStateMapOf<String, Offset>() }
     val widthDeltas = remember { mutableStateMapOf<String, Float>() }
-    // Where auto-stacked modules ended up, so dragging one starts from where it's drawn.
-    val autoPlacements = remember { HashMap<String, ModulePlacement>() }
+    // Where each module was last drawn (after compaction), so gestures start from what's on screen.
+    val drawnAt = remember { HashMap<String, ModulePlacement>() }
+    // Where a module was when its drag began; its live position is this plus the drag offset.
+    val dragStarts = remember { HashMap<String, ModulePlacement>() }
     // The one module being dragged or resized; other touches are ignored until it's released.
     var activeGesture by remember { mutableStateOf<String?>(null) }
     val visible = modules.filterNot { it.id in layout.hidden }
@@ -101,13 +103,15 @@ fun Dashboard(
     BoxWithConstraints(modifier.verticalScroll(rememberScrollState())) {
         val canvasWidthPx = constraints.maxWidth.toFloat()
         val canvasWidthDp = with(density) { canvasWidthPx.toDp().value }
-        fun current(id: String) = layout.placements[id] ?: autoPlacements[id] ?: ModulePlacement(0f, 0f, 1f)
+        fun current(id: String) = drawnAt[id] ?: layout.placements[id] ?: ModulePlacement(0f, 0f, 1f)
 
         fun commit(id: String, placement: ModulePlacement) {
             dragOffsets.remove(id)
             widthDeltas.remove(id)
-            val drawnAt = visible.associate { it.id to current(it.id) }
-            onLayoutChange(layout.pinAll(drawnAt).place(id, placement.normalized(canvasWidthDp)))
+            dragStarts.remove(id)
+            // Save every module where it's drawn now, so only the one that moved changes position.
+            val pinned = visible.filter { it.id != id }.associate { it.id to current(it.id) }
+            onLayoutChange(layout.pinAll(pinned).place(id, placement.normalized(canvasWidthDp)))
         }
 
         /** Claims the gesture for [id], or returns false if another module is already being moved. */
@@ -131,11 +135,16 @@ fun Dashboard(
                         module = module,
                         scale = current(id).scale,
                         editing = editing,
-                        onDrag = { delta -> if (claim(id)) dragOffsets[id] = (dragOffsets[id] ?: Offset.Zero) + delta },
+                        onDrag = { delta ->
+                            if (claim(id)) {
+                                dragStarts.getOrPut(id) { current(id) }
+                                dragOffsets[id] = (dragOffsets[id] ?: Offset.Zero) + delta
+                            }
+                        },
                         onDragEnd = {
                             if (!release(id)) return@ModuleFrame
                             val offset = dragOffsets[id] ?: Offset.Zero
-                            val start = current(id)
+                            val start = dragStarts[id] ?: current(id)
                             commit(id, start.copy(x = start.x + offset.x / canvasWidthPx, y = start.y + with(density) { offset.y.toDp().value }))
                         },
                         onResize = { dx -> if (claim(id)) widthDeltas[id] = (widthDeltas[id] ?: 0f) + dx },
@@ -154,28 +163,66 @@ fun Dashboard(
         ) { measurables, constraints ->
             val width = constraints.maxWidth
             val gap = with(density) { 12.dp.roundToPx() }
-            // Modules the user hasn't placed yet stack, in their natural order, under everything placed.
-            var nextAutoY = layout.placements.filterKeys { it in byId }.values
-                .maxOfOrNull { with(density) { it.y.dp.roundToPx() } }?.let { it + gap } ?: 0
-            val autoOrder = visible.map { it.id }.filterNot { it in layout.placements }
+            fun pxToDp(px: Float) = with(density) { px.toDp().value }
+            fun dpToPx(dp: Float) = with(density) { dp.dp.toPx() }
+
             val placeables = drawOrder.zip(measurables).associate { (id, measurable) ->
                 val base = layout.placements[id] ?: ModulePlacement(0f, 0f, 1f)
                 val moduleWidth = ((base.width * width) + (widthDeltas[id] ?: 0f))
                     .coerceIn(ModulePlacement.MIN_WIDTH * width, width.toFloat()).roundToInt()
                 id to measurable.measure(Constraints(minWidth = moduleWidth, maxWidth = moduleWidth))
             }
-            autoOrder.forEach { id ->
-                autoPlacements[id] = ModulePlacement(0f, with(density) { nextAutoY.toDp().value }, 1f, layout.placements[id]?.scale ?: 1f)
-                nextAutoY += placeables.getValue(id).height + gap
+            // Empty modules (e.g. the activation card once activated) take no space outside edit mode.
+            fun isCollapsed(id: String) = !editing && byId.getValue(id).isEmpty
+
+            // Where each module wants to be, top to bottom: saved modules by their saved position;
+            // others just after the module before them in the default order.
+            val orderKeys = HashMap<String, Float>()
+            var previous = -1f
+            visible.forEach { module ->
+                val key = layout.placements[module.id]?.y ?: (previous + 0.5f)
+                orderKeys[module.id] = key
+                previous = key
             }
-            val positions = drawOrder.associateWith { id ->
-                val placement = current(id)
-                val offset = dragOffsets[id] ?: Offset.Zero
-                val x = (placement.x * width + offset.x).roundToInt().coerceIn(0, (width - placeables.getValue(id).width).coerceAtLeast(0))
-                val y = (with(density) { placement.y.dp.toPx() } + offset.y).roundToInt().coerceAtLeast(0)
-                x to y
+            fun liveX(id: String): Int {
+                val start = dragStarts[id] ?: current(id)
+                val offset = dragOffsets[id]?.x ?: 0f
+                return (start.x * width + offset).roundToInt().coerceIn(0, (width - placeables.getValue(id).width).coerceAtLeast(0))
             }
-            val height = drawOrder.maxOfOrNull { positions.getValue(it).second + placeables.getValue(it).height } ?: 0
+            fun liveY(id: String): Float = dpToPx((dragStarts[id] ?: current(id)).y) + (dragOffsets[id]?.y ?: 0f)
+
+            val dragged = drawOrder.filter { it in dragOffsets }.toSet()
+            val boxes = drawOrder.filterNot(::isCollapsed).map { id ->
+                val base = layout.placements[id] ?: ModulePlacement(0f, 0f, 1f)
+                LayoutBox(
+                    id = id,
+                    x = if (id in dragged) liveX(id) else (base.x * width).roundToInt(),
+                    width = placeables.getValue(id).width,
+                    // A module being dragged slots in wherever the finger has taken it.
+                    order = if (id in dragged) pxToDp(liveY(id)) else orderKeys.getValue(id),
+                    height = placeables.getValue(id).height
+                )
+            }
+            val compactedY = compact(boxes, gap)
+
+            val positions = HashMap<String, Pair<Int, Int>>()
+            drawOrder.forEach { id ->
+                val base = layout.placements[id] ?: ModulePlacement(0f, 0f, 1f)
+                when {
+                    isCollapsed(id) -> {
+                        positions[id] = 0 to 0
+                        drawnAt[id] = base.copy(y = orderKeys.getValue(id))
+                    }
+                    id in dragged -> positions[id] = liveX(id) to liveY(id).roundToInt().coerceAtLeast(0)
+                    else -> {
+                        val x = boxes.first { it.id == id }.x.coerceIn(0, (width - placeables.getValue(id).width).coerceAtLeast(0))
+                        val y = compactedY.getValue(id)
+                        positions[id] = x to y
+                        drawnAt[id] = base.copy(x = x.toFloat() / width, y = pxToDp(y.toFloat()))
+                    }
+                }
+            }
+            val height = drawOrder.filterNot(::isCollapsed).maxOfOrNull { positions.getValue(it).second + placeables.getValue(it).height } ?: 0
             layout(width, height + gap) {
                 drawOrder.forEach { id ->
                     val (x, y) = positions.getValue(id)

@@ -14,8 +14,11 @@ import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -77,19 +80,23 @@ class Main : ComponentActivity() {
             CosmoTheme(darkTheme = darkTheme, fontFamily = settings.font.fontFamily, palette = palette) {
                 val invite by incomingInvite.collectAsState()
                 // The background is drawn once behind everything; screens are transparent over it.
-                Box(Modifier.fillMaxSize()) {
-                    AppBackground(settings.background, Modifier.fillMaxSize())
-                    CosmoApp(
-                        accountStore = accountStore,
-                        seedPhrase = seedPhrase,
-                        settings = settings,
-                        onSettingsChange = {
-                            settings = it
-                            settingsStore.save(it)
-                        },
-                        incomingInvite = invite,
-                        onInviteHandled = { incomingInvite.value = null }
-                    )
+                // With no opaque surface underneath, text would fall back to Compose's default black,
+                // so give everything the theme's text color.
+                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
+                    Box(Modifier.fillMaxSize()) {
+                        AppBackground(settings.background, Modifier.fillMaxSize())
+                        CosmoApp(
+                            accountStore = accountStore,
+                            seedPhrase = seedPhrase,
+                            settings = settings,
+                            onSettingsChange = {
+                                settings = it
+                                settingsStore.save(it)
+                            },
+                            incomingInvite = invite,
+                            onInviteHandled = { incomingInvite.value = null }
+                        )
+                    }
                 }
             }
         }
@@ -215,7 +222,11 @@ private fun AuthFlow(
         onScreenChange(AuthScreen.Welcome)
     }
 
-    Scaffold(modifier = Modifier.fillMaxSize(), containerColor = ComposeColor.Transparent) { innerPadding ->
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        containerColor = ComposeColor.Transparent,
+        contentColor = MaterialTheme.colorScheme.onBackground
+    ) { innerPadding ->
         val modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)

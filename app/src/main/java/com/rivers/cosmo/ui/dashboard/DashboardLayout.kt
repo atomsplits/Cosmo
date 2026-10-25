@@ -101,3 +101,29 @@ data class DashboardLayout(
         }
     }
 }
+
+/** A module's footprint on the canvas, in pixels, for [compact]. [order] is where the user wants it (smaller = higher). */
+data class LayoutBox(val id: String, val x: Int, val width: Int, val order: Float, val height: Int)
+
+/**
+ * Vertical compaction: every module keeps its horizontal position but floats up as far as it can
+ * without overlapping a module above it, so moving or hiding a module never leaves a gap. Modules
+ * are settled in [LayoutBox.order]; side-by-side modules that don't overlap horizontally can share
+ * a row. Returns each module's y position.
+ */
+fun compact(boxes: List<LayoutBox>, gap: Int): Map<String, Int> {
+    val settled = mutableListOf<Pair<LayoutBox, Int>>()
+    boxes.sortedWith(compareBy({ it.order }, { it.x })).forEach { box ->
+        var y = 0
+        // Move down past anything it would overlap, until it fits.
+        while (true) {
+            val blocker = settled.firstOrNull { (other, otherY) ->
+                box.x < other.x + other.width && other.x < box.x + box.width &&
+                    y < otherY + other.height + gap && otherY < y + box.height + gap
+            } ?: break
+            y = blocker.second + blocker.first.height + gap
+        }
+        settled += box to y
+    }
+    return settled.associate { (box, y) -> box.id to y }
+}
