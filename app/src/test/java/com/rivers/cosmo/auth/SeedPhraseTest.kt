@@ -2,6 +2,7 @@ package com.rivers.cosmo.auth
 
 import java.io.File
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -58,6 +59,14 @@ class SeedPhraseTest {
             val id = UserIdGenerator.generate()
             assertTrue(id, Regex("COSMO-[A-Z2-9]{4}-[A-Z2-9]{4}").matches(id))
             assertEquals(id, UserIdGenerator.normalize(" ${id.lowercase()} "))
+            assertTrue(UserIdGenerator.isValid(id))
         }
+    }
+
+    @Test
+    fun rejectsMalformedUserIds() {
+        assertFalse(UserIdGenerator.isValid("COSMO-ABCD"))
+        assertFalse(UserIdGenerator.isValid("COSMO-ABCD-EFG1")) // "1" is never generated
+        assertFalse(UserIdGenerator.isValid("HELLO-ABCD-EFGH"))
     }
 }
