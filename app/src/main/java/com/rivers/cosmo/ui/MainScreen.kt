@@ -47,8 +47,9 @@ import com.rivers.cosmo.ui.motion.LocalMotion
 import com.rivers.cosmo.ui.motion.screenTransition
 import com.rivers.cosmo.ui.payments.CreatePaymentScreen
 import com.rivers.cosmo.ui.payments.PaymentsScreen
-import com.rivers.cosmo.ui.settings.CustomFontsSection
+import com.rivers.cosmo.ui.settings.FontSection
 import com.rivers.cosmo.ui.settings.KycSection
+import com.rivers.cosmo.ui.settings.ThemeSharingSection
 import com.rivers.cosmo.ui.theme.LocalCustomFonts
 import com.rivers.cosmo.ui.settings.PluginsSection
 import com.rivers.cosmo.ui.plugins.pluginModules
@@ -397,16 +398,16 @@ fun MainScreen(
                     onSettingsChange = onSettingsChange,
                     modifier = modifier,
                     identityVerification = kycSection,
-                    customFonts = {
-                        CustomFontsSection(
+                    fonts = {
+                        FontSection(
+                            settings = settings,
+                            onSettingsChange = onSettingsChange,
                             store = fontStore,
-                            fonts = LocalCustomFonts.current,
-                            selectedId = settings.customFont,
-                            onSelect = { onSettingsChange(settings.copy(customFont = it.id)) },
-                            onRemoved = { removed -> if (settings.customFont == removed.id) onSettingsChange(settings.copy(customFont = null)) },
+                            customFonts = LocalCustomFonts.current,
                             onMessage = ::showMessage
                         )
                     },
+                    themeSharing = { ThemeSharingSection(settings, onSettingsChange, onMessage = ::showMessage) },
                     plugins = {
                         PluginsSection(
                             plugins = pluginState.plugins,

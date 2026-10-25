@@ -41,7 +41,6 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import com.rivers.cosmo.settings.AppFont
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.settings.ColorMath
 import com.rivers.cosmo.settings.CustomColors
@@ -51,7 +50,6 @@ import com.rivers.cosmo.ui.components.ColorPickerDialog
 import com.rivers.cosmo.ui.components.ColorSwatch
 import com.rivers.cosmo.ui.components.FormColumn
 import com.rivers.cosmo.ui.theme.Palette
-import com.rivers.cosmo.ui.theme.fontFamily
 import com.rivers.cosmo.ui.theme.previewPalette
 import com.rivers.cosmo.wallet.StellarNetwork
 
@@ -62,8 +60,10 @@ fun SettingsScreen(
     modifier: Modifier = Modifier,
     identityVerification: @Composable () -> Unit = {},
     plugins: @Composable () -> Unit = {},
-    /** The user's own fonts, listed under the built-in ones. */
-    customFonts: @Composable () -> Unit = {}
+    /** The font picker (built-in and added fonts), which needs the font store. */
+    fonts: @Composable () -> Unit = {},
+    /** Share and import buttons for the theme. */
+    themeSharing: @Composable () -> Unit = {}
 ) {
     FormColumn(modifier) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
@@ -86,6 +86,7 @@ fun SettingsScreen(
                 onChange = { onSettingsChange(settings.copy(customColors = it)) }
             )
         }
+        themeSharing()
 
         Text("Banner", style = MaterialTheme.typography.titleMedium)
         BannerSection(banner = settings.banner, onChange = { onSettingsChange(settings.copy(banner = it)) })
@@ -116,27 +117,7 @@ fun SettingsScreen(
         )
 
         Text("Font", style = MaterialTheme.typography.titleMedium)
-        Column(Modifier.selectableGroup()) {
-            AppFont.entries.forEach { font ->
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .selectable(
-                            selected = font == settings.font && settings.customFont == null,
-                            role = Role.RadioButton,
-                            onClick = { onSettingsChange(settings.copy(font = font, customFont = null)) }
-                        )
-                        .padding(vertical = 8.dp)
-                ) {
-                    RadioButton(selected = font == settings.font && settings.customFont == null, onClick = null)
-                    Spacer(Modifier.width(12.dp))
-                    // Each font option is drawn in its own font, so it previews itself.
-                    Text(font.label, fontFamily = font.fontFamily)
-                }
-            }
-        }
-        customFonts()
+        fonts()
     }
 }
 
