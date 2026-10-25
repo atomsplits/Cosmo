@@ -16,6 +16,8 @@ dependencyResolutionManagement {
     repositories {
         google()
         mavenCentral()
+        // Sumsub's identity verification SDK is only published here, not on Maven Central.
+        maven { url = uri("https://maven.sumsub.com/repository/maven-public/") }
     }
 }
 

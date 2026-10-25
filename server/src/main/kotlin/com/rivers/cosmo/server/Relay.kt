@@ -20,7 +20,8 @@ import org.slf4j.LoggerFactory
  * PGP ciphertext: it can't read messages, only route them by Cosmo ID.
  */
 class Relay(
-    private val registry: KeyRegistry = InMemoryKeyRegistry(),
+    /** Shared with [Kyc], which checks requests against the same registered keys. */
+    val registry: KeyRegistry = InMemoryKeyRegistry(),
     private val clock: () -> Long = System::currentTimeMillis
 ) {
     private val log = LoggerFactory.getLogger(Relay::class.java)

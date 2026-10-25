@@ -13,6 +13,7 @@ composeBom = "2024.09.00"
 pgpainless = "1.7.8"
 okhttp = "4.12.0"
 stellarSdk = "5.0.0"
+sumsub = "1.45.1"
 orgJson = "20240303"
 
 [libraries]
@@ -35,6 +36,7 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 pgpainless-core = { group = "org.pgpainless", name = "pgpainless-core", version.ref = "pgpainless" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 stellar-sdk = { group = "network.lightsail", name = "stellar-sdk", version.ref = "stellarSdk" }
+sumsub-mobile-sdk = { group = "com.sumsub.sns", name = "idensic-mobile-sdk", version.ref = "sumsub" }
 org-json = { group = "org.json", name = "json", version.ref = "orgJson" }
 androidx-compose-material-icons-extended = { group = "androidx.compose.material", name = "material-icons-extended" }
 

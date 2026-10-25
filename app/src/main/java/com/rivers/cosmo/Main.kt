@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.rivers.cosmo.auth.AccountStore
 import com.rivers.cosmo.auth.SeedPhrase
 import com.rivers.cosmo.chat.ChatService
+import com.rivers.cosmo.kyc.KycController
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.settings.SettingsStore
 import com.rivers.cosmo.settings.ThemeMode
@@ -109,10 +110,17 @@ fun CosmoApp(
             chatService.start()
             onDispose { chatService.close() }
         }
+        val kyc = remember(signedInUserId, settings.chatServerUrl) {
+            KycController(context.applicationContext, signedInUserId, settings.chatServerUrl)
+        }
+        DisposableEffect(kyc) {
+            onDispose { kyc.close() }
+        }
         MainScreen(
             userId = signedInUserId,
             wallet = wallet,
             chatService = chatService,
+            kyc = kyc,
             settings = settings,
             onSettingsChange = onSettingsChange,
             onLogOut = {

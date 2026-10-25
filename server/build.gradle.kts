@@ -42,4 +42,6 @@ tasks.test {
 // and the server agree on the protocol.
 sourceSets.test {
     kotlin.srcDir("../app/src/main/java/com/rivers/cosmo/chat/crypto")
+    // Only the plain-Kotlin PGP code; the rest of that folder needs Android.
+    kotlin.include("com/rivers/cosmo/server/**", "Pgp.kt")
 }

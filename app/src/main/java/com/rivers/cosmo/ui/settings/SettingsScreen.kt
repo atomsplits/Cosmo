@@ -59,10 +59,14 @@ import com.rivers.cosmo.wallet.StellarNetwork
 fun SettingsScreen(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    identityVerification: @Composable () -> Unit = {}
 ) {
     FormColumn(modifier) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
+
+        Text("Identity verification", style = MaterialTheme.typography.titleMedium)
+        identityVerification()
 
         Text("Theme", style = MaterialTheme.typography.titleMedium)
         ThemeGrid(
@@ -83,7 +87,7 @@ fun SettingsScreen(
             onSelected = { onSettingsChange(settings.copy(stellarNetwork = it)) }
         )
 
-        Text("Chat server", style = MaterialTheme.typography.titleMedium)
+        Text("Cosmo server", style = MaterialTheme.typography.titleMedium)
         ChatServerField(
             url = settings.chatServerUrl,
             onSave = { onSettingsChange(settings.copy(chatServerUrl = it)) }
@@ -262,7 +266,8 @@ private fun ChatServerField(url: String, onSave: (String) -> Unit) {
             supportingText = {
                 Text(
                     if (valid) {
-                        "On the emulator use $DEFAULT_CHAT_SERVER_URL. On your phone, use your " +
+                        "Used for chat and identity verification. On the emulator use " +
+                            "$DEFAULT_CHAT_SERVER_URL. On your phone, use your " +
                             "computer's Wi-Fi address, e.g. ws://192.168.1.20:8080/chat."
                     } else {
                         "The address must start with ws:// or wss://"

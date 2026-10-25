@@ -1,5 +1,8 @@
 package com.rivers.cosmo.ui
 
+import android.app.Activity
+import android.content.Context
+import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -19,6 +22,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
@@ -28,13 +32,18 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.rivers.cosmo.chat.ChatService
+import com.rivers.cosmo.kyc.KycController
+import com.rivers.cosmo.kyc.KycException
+import com.rivers.cosmo.kyc.SumsubLauncher
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.ui.chat.ChatScreen
 import com.rivers.cosmo.ui.chat.ConversationScreen
 import com.rivers.cosmo.ui.payments.CreatePaymentScreen
 import com.rivers.cosmo.ui.payments.PaymentsScreen
+import com.rivers.cosmo.ui.settings.KycSection
 import com.rivers.cosmo.ui.settings.SettingsScreen
 import com.rivers.cosmo.ui.transfers.TransfersScreen
 import com.rivers.cosmo.ui.wallet.WalletScreen
@@ -60,6 +69,7 @@ fun MainScreen(
     userId: String,
     wallet: WalletController,
     chatService: ChatService,
+    kyc: KycController,
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
     onLogOut: () -> Unit
@@ -70,6 +80,10 @@ fun MainScreen(
     var openingChat by remember { mutableStateOf(false) }
     val chatState by chatService.state.collectAsState()
     val walletState by wallet.state.collectAsState()
+    val kycState by kyc.state.collectAsState()
+    var startingKyc by remember { mutableStateOf(false) }
+    val sumsub = remember(kyc) { SumsubLauncher(tokenProvider = kyc::accessToken) }
+    val activity = LocalContext.current.findActivity()
     var sending by remember { mutableStateOf(false) }
     var sendError by remember { mutableStateOf<String?>(null) }
     // Bumped after each successful transfer so the form starts empty again.
@@ -78,6 +92,24 @@ fun MainScreen(
     val scope = rememberCoroutineScope()
     fun showMessage(message: String) {
         scope.launch { snackbarHostState.showSnackbar(message) }
+    }
+
+    fun startVerification() {
+        startingKyc = true
+        scope.launch {
+            try {
+                val token = kyc.accessToken()
+                sumsub.present(activity, token, onClosed = kyc::refresh)
+            } catch (e: KycException) {
+                showMessage(e.message ?: "Couldn't start verification.")
+            }
+            startingKyc = false
+        }
+    }
+
+    // Check verification status whenever Settings opens, e.g. after a review finished.
+    LaunchedEffect(tab) {
+        if (tab == MainTab.Settings) kyc.refresh()
     }
 
     fun send(address: String, balance: WalletBalance, amount: BigDecimal, memo: String?, onSent: () -> Unit) {
@@ -209,8 +241,23 @@ fun MainScreen(
             MainTab.Settings -> SettingsScreen(
                 settings = settings,
                 onSettingsChange = onSettingsChange,
-                modifier = modifier
+                modifier = modifier,
+                identityVerification = {
+                    KycSection(
+                        state = kycState,
+                        starting = startingKyc,
+                        onVerify = ::startVerification,
+                        onRefresh = kyc::refresh
+                    )
+                }
             )
         }
     }
+}
+
+/** LocalContext is often a wrapper around the Activity rather than the Activity itself. */
+private tailrec fun Context.findActivity(): Activity = when (this) {
+    is Activity -> this
+    is ContextWrapper -> baseContext.findActivity()
+    else -> error("No Activity in the context chain")
 }

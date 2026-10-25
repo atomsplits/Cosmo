@@ -63,6 +63,7 @@ dependencies {
     implementation(libs.pgpainless.core)
     implementation(libs.okhttp)
     implementation(libs.stellar.sdk)
+    implementation(libs.sumsub.mobile.sdk)
     testImplementation(libs.junit)
     // Android's built-in org.json only exists on devices, so local unit tests need the real library.
     testImplementation(libs.org.json)

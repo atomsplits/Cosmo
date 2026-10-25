@@ -48,7 +48,8 @@ object HelloVerifier {
         return RegisteredKey(hello.userId, hello.publicKey, OpenPgpFingerprint.of(publicKey).toString())
     }
 
-    private fun signedBy(signedMessage: String, expectedText: String, publicKey: PGPPublicKeyRing): Boolean =
+    /** True when [signedMessage] is a PGP-signed copy of exactly [expectedText], signed by [publicKey]. */
+    fun signedBy(signedMessage: String, expectedText: String, publicKey: PGPPublicKeyRing): Boolean =
         runCatching {
             val stream = PGPainless.decryptAndOrVerify()
                 .onInputStream(ByteArrayInputStream(signedMessage.toByteArray(Charsets.UTF_8)))
