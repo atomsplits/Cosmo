@@ -22,6 +22,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.GridOff
+import androidx.compose.material.icons.filled.GridOn
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.TextFields
@@ -31,6 +33,7 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.IconToggleButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -365,7 +368,9 @@ fun DashboardToolbar(
     onEditingChange: (Boolean) -> Unit,
     hiddenModules: List<DashboardModule>,
     onShow: (String) -> Unit,
-    onReset: () -> Unit
+    onReset: () -> Unit,
+    snapToGrid: Boolean = true,
+    onSnapToGridChange: (Boolean) -> Unit = {}
 ) {
     var adding by rememberSaveable { mutableStateOf(false) }
     var confirmingReset by rememberSaveable { mutableStateOf(false) }
@@ -377,6 +382,12 @@ fun DashboardToolbar(
         if (editing) {
             TextButton(onClick = { adding = true }, enabled = hiddenModules.isNotEmpty()) { Text("Add widget") }
             TextButton(onClick = { confirmingReset = true }) { Text("Reset") }
+            IconToggleButton(checked = snapToGrid, onCheckedChange = onSnapToGridChange) {
+                Icon(
+                    if (snapToGrid) Icons.Filled.GridOn else Icons.Filled.GridOff,
+                    contentDescription = if (snapToGrid) "Snap to grid: on" else "Snap to grid: off"
+                )
+            }
         }
         TextButton(onClick = { onEditingChange(!editing) }) { Text(if (editing) "Done" else "Edit layout") }
     }

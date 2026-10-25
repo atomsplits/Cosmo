@@ -24,9 +24,6 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Shadow
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
@@ -34,8 +31,6 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.settings.BannerSettings
 import com.rivers.cosmo.settings.BannerStyle
-import com.rivers.cosmo.ui.banner.AnimatedBanner
-import com.rivers.cosmo.ui.banner.textColorOnBanner
 import com.rivers.cosmo.ui.dashboard.Dashboard
 import com.rivers.cosmo.ui.dashboard.DashboardLayout
 import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
@@ -66,13 +61,17 @@ fun WalletDashboard(
         layoutStore.save(newLayout)
     }
     Column(modifier) {
-        if (banner.style != BannerStyle.Off) WalletBanner(banner, network)
+        if (banner.style != BannerStyle.Off) {
+            WalletBanner(banner, network, layout, editing, onMove = { id, position -> update(layout.moveBannerItem(id, position)) })
+        }
         DashboardToolbar(
             editing = editing,
             onEditingChange = { editing = it },
             hiddenModules = modules.filter { it.id in layout.hidden },
             onShow = { update(layout.show(it)) },
-            onReset = { update(DashboardLayout()) }
+            onReset = { update(DashboardLayout()) },
+            snapToGrid = layout.snapToGrid,
+            onSnapToGridChange = { update(layout.copy(snapToGrid = it)) }
         )
         Dashboard(
             modules = modules,
@@ -83,32 +82,6 @@ fun WalletDashboard(
         )
     }
 }
-
-/** The animated banner across the top of the Wallet tab, styled in Settings → Banner. */
-@Composable
-private fun WalletBanner(banner: BannerSettings, network: StellarNetwork) {
-    val baseColor = if (banner.matchTheme) MaterialTheme.colorScheme.primary else Color(banner.color)
-    val textColor = Color(textColorOnBanner(banner.style, baseColor.toArgb()))
-    // A soft shadow keeps the title legible over the busier, moving parts of the animation.
-    val shadow = Shadow(if (textColor == Color.White) Color.Black.copy(alpha = 0.5f) else Color.White.copy(alpha = 0.5f), blurRadius = 8f)
-    AnimatedBanner(
-        style = banner.style,
-        baseColor = baseColor,
-        animated = banner.animated,
-        modifier = Modifier.fillMaxWidth().height(BANNER_HEIGHT)
-    ) {
-        Column(Modifier.align(Alignment.BottomStart).padding(20.dp)) {
-            Text("Cosmo", style = MaterialTheme.typography.headlineMedium.copy(shadow = shadow), color = textColor)
-            Text(
-                if (network == StellarNetwork.Testnet) "Wallet · Test network" else "Wallet",
-                style = MaterialTheme.typography.labelLarge.copy(shadow = shadow),
-                color = textColor.copy(alpha = 0.85f)
-            )
-        }
-    }
-}
-
-private val BANNER_HEIGHT = 140.dp
 
 /** The built-in wallet modules, in their default top-to-bottom order. */
 fun walletModules(

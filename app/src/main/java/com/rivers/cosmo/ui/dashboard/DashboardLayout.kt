@@ -32,6 +32,30 @@ data class ModulePlacement(val x: Float, val y: Float, val width: Float, val sca
     }
 }
 
+/** Where an item in the banner (the logo, the title) sits: its top-left corner, in dp. */
+data class BannerPosition(val x: Float, val y: Float)
+
+/** The grid that banner items snap to in edit mode. */
+object BannerGrid {
+    const val STEP_DP = 16f
+
+    /**
+     * Where an item of [itemWidth]×[itemHeight] dragged to ([x], [y]) ends up in a banner of
+     * [bannerWidth]×[bannerHeight] (all dp): on the nearest grid point when [snap] is on, and
+     * always fully inside the banner.
+     */
+    fun place(x: Float, y: Float, itemWidth: Float, itemHeight: Float, bannerWidth: Float, bannerHeight: Float, snap: Boolean): BannerPosition {
+        fun fit(value: Float, item: Float, space: Float): Float {
+            val max = (space - item).coerceAtLeast(0f)
+            if (!snap) return value.coerceIn(0f, max)
+            // Snap, then step back inside if the nearest grid point would push the item over the edge.
+            val lastGridPoint = (max / STEP_DP).toInt() * STEP_DP
+            return ((value / STEP_DP).roundToInt() * STEP_DP).coerceIn(0f, lastGridPoint)
+        }
+        return BannerPosition(fit(x, itemWidth, bannerWidth), fit(y, itemHeight, bannerHeight))
+    }
+}
+
 /**
  * The user's arrangement of the dashboard. Modules without a placement are stacked automatically
  * below the placed ones; [order] is the drawing order (last is on top).
@@ -41,8 +65,14 @@ data class DashboardLayout(
     val hidden: Set<String> = emptySet(),
     val order: List<String> = emptyList(),
     /** A font for individual modules, by font key (an AppFont name or "custom:<id>"); others use the app's font. */
-    val fonts: Map<String, String> = emptyMap()
+    val fonts: Map<String, String> = emptyMap(),
+    /** Positions of items the user moved in the banner, by id ("logo", "title"); others use their defaults. */
+    val banner: Map<String, BannerPosition> = emptyMap(),
+    /** Whether banner items snap to [BannerGrid] while being moved. */
+    val snapToGrid: Boolean = true
 ) {
+    fun moveBannerItem(id: String, position: BannerPosition) = copy(banner = banner + (id to position))
+
     fun place(id: String, placement: ModulePlacement): DashboardLayout =
         copy(placements = placements + (id to placement), order = order - id + id)
 
@@ -75,6 +105,10 @@ data class DashboardLayout(
         .put("hidden", JSONArray(hidden.toList()))
         .put("order", JSONArray(order))
         .put("fonts", JSONObject(fonts))
+        .put("banner", JSONObject().apply {
+            banner.forEach { (id, p) -> put(id, JSONObject().put("x", p.x.toDouble()).put("y", p.y.toDouble())) }
+        })
+        .put("snapToGrid", snapToGrid)
         .toString()
 
     companion object {
@@ -96,7 +130,12 @@ data class DashboardLayout(
                 fun strings(name: String) = root.optJSONArray(name)?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty()
                 val fontsJson = root.optJSONObject("fonts") ?: JSONObject()
                 val fonts = fontsJson.keys().asSequence().associateWith { fontsJson.getString(it) }
-                DashboardLayout(placements, strings("hidden").toSet(), strings("order"), fonts)
+                val bannerJson = root.optJSONObject("banner") ?: JSONObject()
+                val banner = bannerJson.keys().asSequence().associateWith { id ->
+                    val p = bannerJson.getJSONObject(id)
+                    BannerPosition(p.getDouble("x").toFloat(), p.getDouble("y").toFloat())
+                }
+                DashboardLayout(placements, strings("hidden").toSet(), strings("order"), fonts, banner, root.optBoolean("snapToGrid", true))
             }.getOrDefault(DashboardLayout())
         }
     }
