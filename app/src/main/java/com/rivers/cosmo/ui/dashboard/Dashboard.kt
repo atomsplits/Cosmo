@@ -20,8 +20,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.OpenInFull
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.TextFields
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -47,6 +50,9 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
+import com.rivers.cosmo.settings.AppFont
+import com.rivers.cosmo.ui.theme.fontFamily
+import com.rivers.cosmo.ui.theme.typographyFor
 import kotlin.math.roundToInt
 
 /** One movable, resizable block on the dashboard. */
@@ -139,7 +145,9 @@ fun Dashboard(
                             commit(id, start.copy(width = start.width + (widthDeltas[id] ?: 0f) / canvasWidthPx))
                         },
                         onScale = { step -> current(id).let { commit(id, it.copy(scale = it.scale + step)) } },
-                        onHide = { onLayoutChange(layout.hide(id)) }
+                        onHide = { onLayoutChange(layout.hide(id)) },
+                        font = layout.fonts[id]?.let { name -> AppFont.entries.firstOrNull { it.name == name } },
+                        onFontChange = { font -> onLayoutChange(layout.setFont(id, font?.name)) }
                     ) }
                 }
             }
@@ -182,6 +190,9 @@ fun Dashboard(
 private fun ModuleFrame(
     module: DashboardModule,
     scale: Float,
+    /** This module's own font, or null to use the app's font. */
+    font: AppFont?,
+    onFontChange: (AppFont?) -> Unit,
     editing: Boolean,
     onDrag: (Offset) -> Unit,
     onDragEnd: () -> Unit,
@@ -216,6 +227,7 @@ private fun ModuleFrame(
                 IconButton(onClick = { onScale(ModulePlacement.SCALE_STEP) }, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Filled.Add, contentDescription = "Make ${module.title} bigger")
                 }
+                FontPicker(module.title, font, onFontChange)
                 IconButton(onClick = onHide, modifier = Modifier.size(32.dp)) {
                     Icon(Icons.Filled.VisibilityOff, contentDescription = "Hide ${module.title}")
                 }
@@ -224,7 +236,7 @@ private fun ModuleFrame(
         Box {
             Box(Modifier.scaledContent(scale)) {
                 when {
-                    !module.isEmpty -> module.content()
+                    !module.isEmpty -> WithFont(font) { module.content() }
                     editing -> Text(
                         module.emptyHint ?: "Nothing to show right now",
                         style = MaterialTheme.typography.bodySmall,
@@ -341,5 +353,40 @@ fun DashboardToolbar(
             },
             dismissButton = { TextButton(onClick = { confirmingReset = false }) { Text("Cancel") } }
         )
+    }
+}
+
+/** Draws [content] with every text style in [font], or unchanged when [font] is null. */
+@Composable
+private fun WithFont(font: AppFont?, content: @Composable () -> Unit) {
+    if (font == null) {
+        content()
+        return
+    }
+    val typography = remember(font) { typographyFor(font.fontFamily) }
+    MaterialTheme(colorScheme = MaterialTheme.colorScheme, shapes = MaterialTheme.shapes, typography = typography, content = content)
+}
+
+/** The "Aa" button in a module's edit toolbar: picks a font for just that module. */
+@Composable
+private fun FontPicker(title: String, font: AppFont?, onFontChange: (AppFont?) -> Unit) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }, modifier = Modifier.size(32.dp)) {
+            Icon(Icons.Filled.TextFields, contentDescription = "Font for $title")
+        }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            DropdownMenuItem(
+                text = { Text("App font" + if (font == null) "  ✓" else "") },
+                onClick = { onFontChange(null); open = false }
+            )
+            AppFont.entries.forEach { option ->
+                DropdownMenuItem(
+                    // Each option is shown in its own font so it previews itself.
+                    text = { Text(option.label + if (option == font) "  ✓" else "", fontFamily = option.fontFamily) },
+                    onClick = { onFontChange(option); open = false }
+                )
+            }
+        }
     }
 }

@@ -39,7 +39,9 @@ data class ModulePlacement(val x: Float, val y: Float, val width: Float, val sca
 data class DashboardLayout(
     val placements: Map<String, ModulePlacement> = emptyMap(),
     val hidden: Set<String> = emptySet(),
-    val order: List<String> = emptyList()
+    val order: List<String> = emptyList(),
+    /** A font for individual modules, by AppFont name; modules not listed use the app's font. */
+    val fonts: Map<String, String> = emptyMap()
 ) {
     fun place(id: String, placement: ModulePlacement): DashboardLayout =
         copy(placements = placements + (id to placement), order = order - id + id)
@@ -56,6 +58,10 @@ data class DashboardLayout(
 
     fun show(id: String) = copy(hidden = hidden - id)
 
+    /** Sets module [id]'s font, or back to the app's font when [fontName] is null. */
+    fun setFont(id: String, fontName: String?) =
+        copy(fonts = if (fontName == null) fonts - id else fonts + (id to fontName))
+
     /** [ids] sorted so recently moved modules draw on top of the others. */
     fun drawingOrder(ids: List<String>): List<String> =
         ids.sortedBy { id -> order.indexOf(id).let { if (it < 0) -1 else it } }
@@ -68,6 +74,7 @@ data class DashboardLayout(
         })
         .put("hidden", JSONArray(hidden.toList()))
         .put("order", JSONArray(order))
+        .put("fonts", JSONObject(fonts))
         .toString()
 
     companion object {
@@ -87,7 +94,9 @@ data class DashboardLayout(
                     )
                 }
                 fun strings(name: String) = root.optJSONArray(name)?.let { a -> (0 until a.length()).map(a::getString) }.orEmpty()
-                DashboardLayout(placements, strings("hidden").toSet(), strings("order"))
+                val fontsJson = root.optJSONObject("fonts") ?: JSONObject()
+                val fonts = fontsJson.keys().asSequence().associateWith { fontsJson.getString(it) }
+                DashboardLayout(placements, strings("hidden").toSet(), strings("order"), fonts)
             }.getOrDefault(DashboardLayout())
         }
     }

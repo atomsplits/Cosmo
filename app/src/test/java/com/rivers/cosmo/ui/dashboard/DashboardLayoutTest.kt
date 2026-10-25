@@ -40,6 +40,7 @@ class DashboardLayoutTest {
             .place("balance", ModulePlacement(0.1f, 24f, 0.6f, 1.4f))
             .place("plugin:goal-1a2b3c/goal", ModulePlacement(0f, 200f, 1f))
             .hide("logout")
+            .setFont("balance", "PlayfairDisplay")
         assertEquals(layout, DashboardLayout.fromJson(layout.toJson()))
         assertEquals(DashboardLayout(), DashboardLayout.fromJson("not json"))
         assertEquals(DashboardLayout(), DashboardLayout.fromJson(null))
@@ -58,5 +59,14 @@ class DashboardLayoutTest {
         assertEquals(ModulePlacement(0f, 0f, 1f), moved.placements["a"])
         assertEquals(ModulePlacement(0f, 600f, 1f), moved.placements["b"])
         assertEquals(ModulePlacement(0f, 240f, 1f), moved.placements["c"]) // didn't jump below "b"
+    }
+
+    @Test
+    fun modulesCanHaveTheirOwnFont() {
+        val layout = DashboardLayout().setFont("balance", "Doto").setFont("activity", "Lora")
+        assertEquals(mapOf("balance" to "Doto", "activity" to "Lora"), layout.fonts)
+        assertEquals(mapOf("activity" to "Lora"), layout.setFont("balance", null).fonts)
+        // Layouts saved before per-module fonts existed still load.
+        assertEquals(emptyMap<String, String>(), DashboardLayout.fromJson("""{"placements":{},"hidden":[],"order":[]}""").fonts)
     }
 }

@@ -60,6 +60,32 @@ data class BannerSettings(
     val animated: Boolean = true
 )
 
+/** The pattern drawn behind every screen. */
+enum class BackgroundStyle(val label: String) {
+    Plain("Plain"),
+    Gradient("Gradient"),
+    Fade("Fade"),
+    PolkaDots("Polka dots"),
+    Glow("Glow"),
+    Mesh("Mesh"),
+    Stripes("Stripes")
+}
+
+data class BackgroundSettings(
+    val style: BackgroundStyle = BackgroundStyle.Plain,
+    /** True to take the colors from the current theme; false to use [colorA] and [colorB]. */
+    val matchTheme: Boolean = true,
+    val colorA: Int = 0xFF7C4DFF.toInt(),
+    val colorB: Int = 0xFF00BFA5.toInt(),
+    /** How strongly the colors show over the theme's background, 0–1. Kept moderate so text stays readable. */
+    val strength: Float = DEFAULT_STRENGTH
+) {
+    companion object {
+        const val DEFAULT_STRENGTH = 0.35f
+        const val MAX_STRENGTH = 0.7f
+    }
+}
+
 /** The colors of the user's custom theme, as opaque ARGB ints. */
 data class CustomColors(
     val background: Int = 0xFF101418.toInt(),
@@ -74,7 +100,8 @@ data class AppSettings(
     val chatServerUrl: String = DEFAULT_CHAT_SERVER_URL,
     // The test network until the user deliberately switches to real money.
     val stellarNetwork: StellarNetwork = StellarNetwork.Testnet,
-    val banner: BannerSettings = BannerSettings()
+    val banner: BannerSettings = BannerSettings(),
+    val background: BackgroundSettings = BackgroundSettings()
 )
 
 /** The Android emulator's address for the computer running it, where server/ runs by default. */
@@ -103,6 +130,15 @@ class SettingsStore(context: Context) {
                     color = prefs.getInt(KEY_BANNER_COLOR, default.color),
                     animated = prefs.getBoolean(KEY_BANNER_ANIMATED, default.animated)
                 )
+            },
+            background = BackgroundSettings().let { default ->
+                BackgroundSettings(
+                    style = enumOrDefault(prefs.getString(KEY_BACKGROUND_STYLE, null), default.style),
+                    matchTheme = prefs.getBoolean(KEY_BACKGROUND_MATCH_THEME, default.matchTheme),
+                    colorA = prefs.getInt(KEY_BACKGROUND_COLOR_A, default.colorA),
+                    colorB = prefs.getInt(KEY_BACKGROUND_COLOR_B, default.colorB),
+                    strength = prefs.getFloat(KEY_BACKGROUND_STRENGTH, default.strength)
+                )
             }
         )
     }
@@ -120,6 +156,11 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_BANNER_MATCH_THEME, settings.banner.matchTheme)
             .putInt(KEY_BANNER_COLOR, settings.banner.color)
             .putBoolean(KEY_BANNER_ANIMATED, settings.banner.animated)
+            .putString(KEY_BACKGROUND_STYLE, settings.background.style.name)
+            .putBoolean(KEY_BACKGROUND_MATCH_THEME, settings.background.matchTheme)
+            .putInt(KEY_BACKGROUND_COLOR_A, settings.background.colorA)
+            .putInt(KEY_BACKGROUND_COLOR_B, settings.background.colorB)
+            .putFloat(KEY_BACKGROUND_STRENGTH, settings.background.strength)
             .apply()
     }
 
@@ -136,6 +177,11 @@ class SettingsStore(context: Context) {
         const val KEY_BANNER_MATCH_THEME = "banner_match_theme"
         const val KEY_BANNER_COLOR = "banner_color"
         const val KEY_BANNER_ANIMATED = "banner_animated"
+        const val KEY_BACKGROUND_STYLE = "background_style"
+        const val KEY_BACKGROUND_MATCH_THEME = "background_match_theme"
+        const val KEY_BACKGROUND_COLOR_A = "background_color_a"
+        const val KEY_BACKGROUND_COLOR_B = "background_color_b"
+        const val KEY_BACKGROUND_STRENGTH = "background_strength"
 
         inline fun <reified T : Enum<T>> enumOrDefault(name: String?, default: T): T =
             enumValues<T>().firstOrNull { it.name == name } ?: default

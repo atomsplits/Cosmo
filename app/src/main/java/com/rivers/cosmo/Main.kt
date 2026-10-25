@@ -2,6 +2,7 @@ package com.rivers.cosmo
 
 import android.content.pm.ApplicationInfo
 import android.graphics.Color
+import androidx.compose.ui.graphics.Color as ComposeColor
 import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -10,6 +11,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
@@ -39,6 +41,7 @@ import com.rivers.cosmo.ui.MainScreen
 import com.rivers.cosmo.ui.auth.LogInScreen
 import com.rivers.cosmo.ui.auth.SignUpScreen
 import com.rivers.cosmo.ui.auth.WelcomeScreen
+import com.rivers.cosmo.ui.background.AppBackground
 import com.rivers.cosmo.ui.theme.CosmoTheme
 import com.rivers.cosmo.ui.theme.fontFamily
 import com.rivers.cosmo.ui.theme.palette
@@ -73,17 +76,21 @@ class Main : ComponentActivity() {
             }
             CosmoTheme(darkTheme = darkTheme, fontFamily = settings.font.fontFamily, palette = palette) {
                 val invite by incomingInvite.collectAsState()
-                CosmoApp(
-                    accountStore = accountStore,
-                    seedPhrase = seedPhrase,
-                    settings = settings,
-                    onSettingsChange = {
-                        settings = it
-                        settingsStore.save(it)
-                    },
-                    incomingInvite = invite,
-                    onInviteHandled = { incomingInvite.value = null }
-                )
+                // The background is drawn once behind everything; screens are transparent over it.
+                Box(Modifier.fillMaxSize()) {
+                    AppBackground(settings.background, Modifier.fillMaxSize())
+                    CosmoApp(
+                        accountStore = accountStore,
+                        seedPhrase = seedPhrase,
+                        settings = settings,
+                        onSettingsChange = {
+                            settings = it
+                            settingsStore.save(it)
+                        },
+                        incomingInvite = invite,
+                        onInviteHandled = { incomingInvite.value = null }
+                    )
+                }
             }
         }
     }
@@ -208,7 +215,7 @@ private fun AuthFlow(
         onScreenChange(AuthScreen.Welcome)
     }
 
-    Scaffold(modifier = Modifier.fillMaxSize()) { innerPadding ->
+    Scaffold(modifier = Modifier.fillMaxSize(), containerColor = ComposeColor.Transparent) { innerPadding ->
         val modifier = Modifier
             .fillMaxSize()
             .padding(innerPadding)
