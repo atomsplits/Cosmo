@@ -41,11 +41,13 @@ fun SendForm(
     error: String?,
     onSubmit: (address: String, balance: WalletBalance, amount: BigDecimal, memo: String?) -> Unit,
     modifier: Modifier = Modifier,
-    onBack: (() -> Unit)? = null
+    onBack: (() -> Unit)? = null,
+    /** Pre-filled values, e.g. from a plugin's suggested payment. The user can still change them. */
+    prefill: PaymentPrefill? = null
 ) {
-    var address by rememberSaveable { mutableStateOf("") }
-    var amount by rememberSaveable { mutableStateOf("") }
-    var memo by rememberSaveable { mutableStateOf("") }
+    var address by rememberSaveable { mutableStateOf(prefill?.address.orEmpty()) }
+    var amount by rememberSaveable { mutableStateOf(prefill?.amount.orEmpty()) }
+    var memo by rememberSaveable { mutableStateOf(prefill?.memo.orEmpty()) }
     var selectedKey by rememberSaveable { mutableStateOf<String?>(null) }
     var confirming by rememberSaveable { mutableStateOf(false) }
 
@@ -144,5 +146,7 @@ fun SendForm(
         )
     }
 }
+
+data class PaymentPrefill(val address: String, val amount: String?, val memo: String?)
 
 private fun key(balance: WalletBalance) = "${balance.code}:${balance.issuer.orEmpty()}"

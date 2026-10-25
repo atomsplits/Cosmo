@@ -60,13 +60,17 @@ fun SettingsScreen(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
     modifier: Modifier = Modifier,
-    identityVerification: @Composable () -> Unit = {}
+    identityVerification: @Composable () -> Unit = {},
+    plugins: @Composable () -> Unit = {}
 ) {
     FormColumn(modifier) {
         Text("Settings", style = MaterialTheme.typography.headlineMedium)
 
         Text("Identity verification", style = MaterialTheme.typography.titleMedium)
         identityVerification()
+
+        Text("Plugins", style = MaterialTheme.typography.titleMedium)
+        plugins()
 
         Text("Theme", style = MaterialTheme.typography.titleMedium)
         ThemeGrid(

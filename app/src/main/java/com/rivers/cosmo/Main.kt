@@ -25,6 +25,8 @@ import com.rivers.cosmo.auth.AccountStore
 import com.rivers.cosmo.auth.SeedPhrase
 import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.kyc.KycController
+import com.rivers.cosmo.plugins.PluginHost
+import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.settings.SettingsStore
 import com.rivers.cosmo.settings.ThemeMode
@@ -116,8 +118,16 @@ fun CosmoApp(
         DisposableEffect(kyc) {
             onDispose { kyc.close() }
         }
+        val plugins = remember(signedInUserId) { PluginHost(context.applicationContext) }
+        DisposableEffect(plugins) {
+            plugins.start()
+            onDispose { plugins.close() }
+        }
+        val layoutStore = remember { DashboardLayoutStore(context.applicationContext) }
         MainScreen(
             userId = signedInUserId,
+            plugins = plugins,
+            layoutStore = layoutStore,
             wallet = wallet,
             chatService = chatService,
             kyc = kyc,

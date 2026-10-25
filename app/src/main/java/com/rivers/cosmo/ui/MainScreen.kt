@@ -44,9 +44,17 @@ import com.rivers.cosmo.ui.chat.ConversationScreen
 import com.rivers.cosmo.ui.payments.CreatePaymentScreen
 import com.rivers.cosmo.ui.payments.PaymentsScreen
 import com.rivers.cosmo.ui.settings.KycSection
+import com.rivers.cosmo.ui.settings.PluginsSection
+import com.rivers.cosmo.ui.plugins.pluginModules
+import com.rivers.cosmo.ui.components.PaymentPrefill
+import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
+import com.rivers.cosmo.plugins.PluginEffect
+import com.rivers.cosmo.plugins.PluginHost
+import com.rivers.cosmo.plugins.WalletData
 import com.rivers.cosmo.ui.settings.SettingsScreen
 import com.rivers.cosmo.ui.transfers.TransfersScreen
-import com.rivers.cosmo.ui.wallet.WalletScreen
+import com.rivers.cosmo.ui.wallet.WalletDashboard
+import com.rivers.cosmo.ui.wallet.walletModules
 import com.rivers.cosmo.wallet.WalletBalance
 import com.rivers.cosmo.wallet.WalletController
 import com.rivers.cosmo.wallet.formatAmount
@@ -70,6 +78,8 @@ fun MainScreen(
     wallet: WalletController,
     chatService: ChatService,
     kyc: KycController,
+    plugins: PluginHost,
+    layoutStore: DashboardLayoutStore,
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
     onLogOut: () -> Unit
@@ -81,6 +91,8 @@ fun MainScreen(
     val chatState by chatService.state.collectAsState()
     val walletState by wallet.state.collectAsState()
     val kycState by kyc.state.collectAsState()
+    val pluginState by plugins.state.collectAsState()
+    var paymentPrefill by remember { mutableStateOf<PaymentPrefill?>(null) }
     var startingKyc by remember { mutableStateOf(false) }
     val sumsub = remember(kyc) { SumsubLauncher(tokenProvider = kyc::accessToken) }
     val activity = LocalContext.current.findActivity()
@@ -104,6 +116,26 @@ fun MainScreen(
                 showMessage(e.message ?: "Couldn't start verification.")
             }
             startingKyc = false
+        }
+    }
+
+    // Plugins see a read-only snapshot of the wallet, refreshed whenever it changes.
+    LaunchedEffect(walletState, kycState.status) {
+        plugins.updateData(WalletData.json(userId, walletState, kycState.status))
+    }
+
+    // What plugins ask for: messages, or a payment the user reviews in the normal form.
+    LaunchedEffect(plugins) {
+        plugins.effects.collect { effect ->
+            when (effect) {
+                is PluginEffect.Toast -> showMessage(effect.message)
+                is PluginEffect.SuggestPayment -> {
+                    paymentPrefill = PaymentPrefill(effect.to, effect.amount, effect.memo)
+                    sendError = null
+                    tab = MainTab.Payments
+                    creatingPayment = true
+                }
+            }
         }
     }
 
@@ -164,34 +196,48 @@ fun MainScreen(
             // Lets screens that use imePadding() avoid counting the navigation bar twice.
             .consumeWindowInsets(innerPadding)
         when (tab) {
-            MainTab.Wallet -> WalletScreen(
-                state = walletState,
-                onRefresh = wallet::refresh,
-                onFund = wallet::fundWithFriendbot,
-                onAddressCopied = { showMessage("Wallet address copied.") },
-                onLogOut = onLogOut,
+            MainTab.Wallet -> WalletDashboard(
+                modules = walletModules(
+                    state = walletState,
+                    kycState = kycState,
+                    startingKyc = startingKyc,
+                    onRefresh = wallet::refresh,
+                    onFund = wallet::fundWithFriendbot,
+                    onAddressCopied = { showMessage("Wallet address copied.") },
+                    onVerify = ::startVerification,
+                    onRefreshKyc = kyc::refresh,
+                    onLogOut = onLogOut
+                ) + pluginModules(pluginState.widgets, onClick = plugins::click),
+                layoutStore = layoutStore,
                 modifier = modifier
             )
             MainTab.Payments ->
                 if (creatingPayment) {
-                    CreatePaymentScreen(
+                    // Keyed so a new suggested payment refills the form even if it's already open.
+                    key(paymentPrefill) { CreatePaymentScreen(
+                        prefill = paymentPrefill,
                         state = walletState,
                         sending = sending,
                         error = sendError,
                         onSubmit = { address, balance, amount, memo ->
-                            send(address, balance, amount, memo) { creatingPayment = false }
+                            send(address, balance, amount, memo) {
+                                creatingPayment = false
+                                paymentPrefill = null
+                            }
                         },
                         onBack = {
                             creatingPayment = false
+                            paymentPrefill = null
                             sendError = null
                         },
                         modifier = modifier
-                    )
+                    ) }
                 } else {
                     PaymentsScreen(
                         state = walletState,
                         onCreatePayment = {
                             sendError = null
+                            paymentPrefill = null
                             creatingPayment = true
                         },
                         modifier = modifier
@@ -248,6 +294,15 @@ fun MainScreen(
                         starting = startingKyc,
                         onVerify = ::startVerification,
                         onRefresh = kyc::refresh
+                    )
+                },
+                plugins = {
+                    PluginsSection(
+                        plugins = pluginState.plugins,
+                        onInstall = plugins::install,
+                        onEnabledChange = plugins::setEnabled,
+                        onRemove = plugins::remove,
+                        onMessage = ::showMessage
                     )
                 }
             )

@@ -14,6 +14,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.ui.components.FormColumn
+import com.rivers.cosmo.ui.components.PaymentPrefill
 import com.rivers.cosmo.ui.components.SendForm
 import com.rivers.cosmo.wallet.PaymentRecord
 import com.rivers.cosmo.wallet.WalletBalance
@@ -44,7 +45,7 @@ fun PaymentsScreen(state: WalletController.State, onCreatePayment: () -> Unit, m
 }
 
 @Composable
-private fun PaymentRow(payment: PaymentRecord) {
+fun PaymentRow(payment: PaymentRecord) {
     Card(Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -80,7 +81,8 @@ fun CreatePaymentScreen(
     error: String?,
     onSubmit: (address: String, balance: WalletBalance, amount: BigDecimal, memo: String?) -> Unit,
     onBack: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    prefill: PaymentPrefill? = null
 ) {
     SendForm(
         title = "Create payment",
@@ -91,6 +93,7 @@ fun CreatePaymentScreen(
         error = error,
         onSubmit = onSubmit,
         onBack = onBack,
-        modifier = modifier
+        modifier = modifier,
+        prefill = prefill
     )
 }

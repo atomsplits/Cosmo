@@ -9,8 +9,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -21,6 +19,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -29,91 +28,153 @@ import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
-import com.rivers.cosmo.ui.theme.CosmoTheme
+import com.rivers.cosmo.kyc.KycController
+import com.rivers.cosmo.ui.dashboard.Dashboard
+import com.rivers.cosmo.ui.dashboard.DashboardLayout
+import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
+import com.rivers.cosmo.ui.dashboard.DashboardModule
+import com.rivers.cosmo.ui.dashboard.DashboardToolbar
+import com.rivers.cosmo.ui.payments.PaymentRow
+import com.rivers.cosmo.ui.settings.KycSection
 import com.rivers.cosmo.wallet.AccountState
 import com.rivers.cosmo.wallet.StellarClient
 import com.rivers.cosmo.wallet.StellarNetwork
-import com.rivers.cosmo.wallet.Wallet
-import com.rivers.cosmo.wallet.WalletBalance
 import com.rivers.cosmo.wallet.WalletController
 import com.rivers.cosmo.wallet.formatAmount
 import com.rivers.cosmo.wallet.shortenAddress
 import java.math.BigDecimal
 
+/** The Wallet tab: a dashboard of modules the user can rearrange, resize and hide. */
 @Composable
-fun WalletScreen(
+fun WalletDashboard(modules: List<DashboardModule>, layoutStore: DashboardLayoutStore, modifier: Modifier = Modifier) {
+    var layout by remember { mutableStateOf(layoutStore.load()) }
+    var editing by rememberSaveable { mutableStateOf(false) }
+    fun update(newLayout: DashboardLayout) {
+        layout = newLayout
+        layoutStore.save(newLayout)
+    }
+    Column(modifier) {
+        DashboardToolbar(
+            editing = editing,
+            onEditingChange = { editing = it },
+            hiddenModules = modules.filter { it.id in layout.hidden },
+            onShow = { update(layout.show(it)) },
+            onReset = { update(DashboardLayout()) }
+        )
+        Dashboard(
+            modules = modules,
+            layout = layout,
+            onLayoutChange = ::update,
+            editing = editing,
+            modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
+        )
+    }
+}
+
+/** The built-in wallet modules, in their default top-to-bottom order. */
+fun walletModules(
     state: WalletController.State,
+    kycState: KycController.State,
+    startingKyc: Boolean,
     onRefresh: () -> Unit,
     onFund: () -> Unit,
     onAddressCopied: () -> Unit,
-    onLogOut: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        modifier = modifier
-            .verticalScroll(rememberScrollState())
-            .padding(24.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+    onVerify: () -> Unit,
+    onRefreshKyc: () -> Unit,
+    onLogOut: () -> Unit
+): List<DashboardModule> = listOf(
+    DashboardModule("network", "Network") { NetworkBadge(state.network) },
+    DashboardModule(
+        "key-missing", "Wallet key notice",
+        isEmpty = !state.keyMissing,
+        emptyHint = "Appears if this device doesn't have your wallet key"
     ) {
-        if (state.network == StellarNetwork.Testnet) {
-            Text(
-                "TEST NETWORK · balances have no real value",
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
+        Notice(
+            "Your wallet key isn't on this device. Log out, then log in again with your " +
+                "12-word recovery phrase to unlock your wallet."
+        )
+    },
+    DashboardModule("balance", "Balance", isEmpty = state.keyMissing) { BalanceModule(state) },
+    DashboardModule(
+        "activation", "Activate wallet",
+        isEmpty = state.account != AccountState.NotActivated,
+        emptyHint = "Appears while your wallet isn't activated"
+    ) { NotActivated(state, onFund) },
+    DashboardModule("address", "Wallet ID", isEmpty = state.address == null) {
+        state.address?.let { WalletIdCard(it, onAddressCopied) }
+    },
+    DashboardModule("refresh", "Refresh", isEmpty = state.keyMissing) { RefreshModule(state, onRefresh) },
+    DashboardModule("activity", "Recent activity", isEmpty = state.keyMissing) { ActivityModule(state) },
+    DashboardModule("kyc", "Identity verification") {
+        KycSection(state = kycState, starting = startingKyc, onVerify = onVerify, onRefresh = onRefreshKyc)
+    },
+    DashboardModule("logout", "Log out") {
+        OutlinedButton(onClick = onLogOut, modifier = Modifier.fillMaxWidth()) { Text("Log out") }
+    }
+)
 
-        if (state.keyMissing) {
-            Notice(
-                "Your wallet key isn't on this device. Log out, then log in again with your " +
-                    "12-word recovery phrase to unlock your wallet."
-            )
-        } else {
-            Text("Current Balance", style = MaterialTheme.typography.titleMedium)
-            val active = state.account as? AccountState.Active
-            Text(
-                when {
-                    active != null -> formatAmount(active.xlm, "XLM")
-                    state.account == AccountState.NotActivated -> formatAmount(BigDecimal.ZERO, "XLM")
-                    else -> "…"
-                },
-                style = MaterialTheme.typography.displaySmall,
-                textAlign = TextAlign.Center
-            )
-            active?.balances?.filterNot { it.isNative }?.forEach { balance -> OtherAsset(balance) }
+@Composable
+private fun NetworkBadge(network: StellarNetwork) {
+    Text(
+        if (network == StellarNetwork.Testnet) "TEST NETWORK · balances have no real value" else "PUBLIC NETWORK · real XLM",
+        style = MaterialTheme.typography.labelMedium,
+        color = MaterialTheme.colorScheme.primary,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+    )
+}
 
-            if (state.account == AccountState.NotActivated) {
-                NotActivated(state, onFund)
-            }
-
-            state.address?.let { WalletIdCard(it, onCopied = onAddressCopied) }
-
-            state.error?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
-            }
-            TextButton(onClick = onRefresh, enabled = !state.loading) {
-                Text(if (state.loading) "Refreshing…" else "Refresh")
-            }
-        }
-
+@Composable
+private fun BalanceModule(state: WalletController.State) {
+    val active = state.account as? AccountState.Active
+    Column(Modifier.fillMaxWidth().padding(vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Text("Current Balance", style = MaterialTheme.typography.titleMedium)
         Spacer(Modifier.height(8.dp))
-        OutlinedButton(onClick = onLogOut, modifier = Modifier.fillMaxWidth()) {
-            Text("Log out")
+        Text(
+            when {
+                active != null -> formatAmount(active.xlm, "XLM")
+                state.account == AccountState.NotActivated -> formatAmount(BigDecimal.ZERO, "XLM")
+                else -> "…"
+            },
+            style = MaterialTheme.typography.displaySmall,
+            textAlign = TextAlign.Center
+        )
+        active?.balances?.filterNot { it.isNative }?.forEach { balance ->
+            Text(
+                formatAmount(balance.amount, balance.code),
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }
 
 @Composable
-private fun OtherAsset(balance: WalletBalance) {
-    Text(
-        formatAmount(balance.amount, balance.code),
-        style = MaterialTheme.typography.titleMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant
-    )
+private fun RefreshModule(state: WalletController.State, onRefresh: () -> Unit) {
+    Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+        state.error?.let {
+            Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall, textAlign = TextAlign.Center)
+        }
+        TextButton(onClick = onRefresh, enabled = !state.loading) {
+            Text(if (state.loading) "Refreshing…" else "Refresh")
+        }
+    }
 }
+
+@Composable
+private fun ActivityModule(state: WalletController.State) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Recent activity", style = MaterialTheme.typography.titleMedium)
+        if (state.payments.isEmpty()) {
+            Text("No payments yet.", style = MaterialTheme.typography.bodyMedium)
+        } else {
+            state.payments.take(ACTIVITY_ITEMS).forEach { PaymentRow(it) }
+        }
+    }
+}
+
+private const val ACTIVITY_ITEMS = 5
 
 @Composable
 private fun NotActivated(state: WalletController.State, onFund: () -> Unit) {
@@ -132,7 +193,7 @@ private fun NotActivated(state: WalletController.State, onFund: () -> Unit) {
             } else {
                 Text(
                     "New Stellar accounts need at least ${StellarClient.MIN_STARTING_BALANCE} XLM before they " +
-                        "exist on the network. Send some to the address below from an exchange or another wallet.",
+                        "exist on the network. Send some to your wallet ID from an exchange or another wallet.",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
@@ -188,24 +249,5 @@ private fun WalletIdCard(address: String, onCopied: () -> Unit) {
                 }) { Text("Copy") }
             }
         }
-    }
-}
-
-@Preview(showBackground = true)
-@Composable
-fun WalletScreenPreview() {
-    CosmoTheme {
-        WalletScreen(
-            state = WalletController.State(
-                network = StellarNetwork.Testnet,
-                address = Wallet.DEMO_ADDRESS,
-                loading = false,
-                account = AccountState.Active(listOf(WalletBalance("XLM", null, BigDecimal("1250.5"))))
-            ),
-            onRefresh = {},
-            onFund = {},
-            onAddressCopied = {},
-            onLogOut = {}
-        )
     }
 }
