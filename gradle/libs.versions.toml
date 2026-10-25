@@ -13,7 +13,7 @@ composeBom = "2024.09.00"
 pgpainless = "1.7.8"
 okhttp = "4.12.0"
 stellarSdk = "5.0.0"
-sumsub = "1.45.1"
+toml4j = "0.7.2"
 rhino = "1.7.15.1"
 zxing = "3.5.3"
 orgJson = "20240303"
@@ -38,7 +38,7 @@ androidx-compose-material3 = { group = "androidx.compose.material3", name = "mat
 pgpainless-core = { group = "org.pgpainless", name = "pgpainless-core", version.ref = "pgpainless" }
 okhttp = { group = "com.squareup.okhttp3", name = "okhttp", version.ref = "okhttp" }
 stellar-sdk = { group = "network.lightsail", name = "stellar-sdk", version.ref = "stellarSdk" }
-sumsub-mobile-sdk = { group = "com.sumsub.sns", name = "idensic-mobile-sdk", version.ref = "sumsub" }
+toml4j = { group = "com.moandjiezana.toml", name = "toml4j", version.ref = "toml4j" }
 # JavaScript engine for plugins. 1.7.15.x is the last line that targets Java 8, which suits older Androids.
 rhino = { group = "org.mozilla", name = "rhino", version.ref = "rhino" }
 # Draws QR codes for bill split invites.

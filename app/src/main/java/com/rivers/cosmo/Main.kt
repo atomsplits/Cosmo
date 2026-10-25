@@ -31,6 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.rivers.cosmo.auth.AccountStore
 import com.rivers.cosmo.auth.SeedPhrase
 import com.rivers.cosmo.chat.ChatService
+import com.rivers.cosmo.anchor.CashOutController
 import com.rivers.cosmo.kyc.KycController
 import com.rivers.cosmo.plugins.PluginHost
 import com.rivers.cosmo.splits.SplitInvite
@@ -156,12 +157,13 @@ fun CosmoApp(
             chatService.start()
             onDispose { chatService.close() }
         }
-        val kyc = remember(signedInUserId, settings.chatServerUrl) {
-            KycController(context.applicationContext, signedInUserId, settings.chatServerUrl)
-        }
+        // Verification and cash-outs go through the anchors chosen in Settings, signed in with this wallet.
+        val anchorDomains = settings.anchors.forNetwork(settings.stellarNetwork)
+        val kyc = remember(wallet, anchorDomains) { KycController(wallet.anchors, anchorDomains) }
         DisposableEffect(kyc) {
             onDispose { kyc.close() }
         }
+        val cashOut = remember(wallet) { CashOutController(context.applicationContext, wallet, settings.stellarNetwork) }
         val plugins = remember(signedInUserId) { PluginHost(context.applicationContext) }
         DisposableEffect(plugins) {
             plugins.start()
@@ -183,6 +185,7 @@ fun CosmoApp(
             wallet = wallet,
             chatService = chatService,
             kyc = kyc,
+            cashOut = cashOut,
             settings = settings,
             onSettingsChange = onSettingsChange,
             onLogOut = {

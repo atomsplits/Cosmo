@@ -12,28 +12,20 @@ import io.ktor.server.websocket.pingPeriod
 import io.ktor.server.websocket.timeout
 import io.ktor.server.websocket.webSocket
 import kotlin.time.Duration.Companion.seconds
-import org.slf4j.LoggerFactory
 
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
-    val relay = Relay()
-    val sumsub = SumsubConfig.fromEnvironment()
-    if (sumsub == null) {
-        LoggerFactory.getLogger("Main").info("Identity verification is off: set SUMSUB_APP_TOKEN and SUMSUB_SECRET_KEY to enable it.")
-    }
-    val kyc = Kyc(relay.registry, sumsub?.let(::HttpSumsubApi), sumsub?.webhookSecret)
-    embeddedServer(Netty, port = port, host = "0.0.0.0") { cosmoRelay(relay, kyc) }.start(wait = true)
+    embeddedServer(Netty, port = port, host = "0.0.0.0") { cosmoRelay(Relay()) }.start(wait = true)
 }
 
-fun Application.cosmoRelay(relay: Relay = Relay(), kyc: Kyc = Kyc(relay.registry, api = null, webhookSecret = null)) {
+fun Application.cosmoRelay(relay: Relay = Relay()) {
     install(WebSockets) {
         pingPeriod = 15.seconds
         timeout = 30.seconds
         maxFrameSize = 128L * 1024
     }
     routing {
-        get("/") { call.respondText("Cosmo server. Chat: WebSocket /chat. Identity verification: /kyc/*.") }
+        get("/") { call.respondText("Cosmo server. Chat: WebSocket /chat.") }
         webSocket("/chat") { relay.handle(this) }
-        kyc.routes(this)
     }
 }

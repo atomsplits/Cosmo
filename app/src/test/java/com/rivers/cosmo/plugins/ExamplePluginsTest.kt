@@ -40,7 +40,7 @@ class ExamplePluginsTest {
                 PaymentRecord("2", incoming = false, counterparty = "GC", amount = BigDecimal("30.25"), assetCode = "XLM", createdAt = "2026-10-25T15:00:00Z", transactionHash = "h2")
             )
         ),
-        kyc = KycStatus.APPROVED
+        kyc = KycStatus.ACCEPTED
     )
 
     @Test
@@ -49,7 +49,7 @@ class ExamplePluginsTest {
         assertEquals("testnet", json.getString("network"))
         assertEquals("250.5", json.getString("xlm"))
         assertEquals(30.25, json.getJSONArray("payments").getJSONObject(1).getDouble("value"), 0.0)
-        assertEquals("APPROVED", json.getString("kyc"))
+        assertEquals("ACCEPTED", json.getString("kyc"))
         assertTrue(json.getJSONArray("balances").getJSONObject(0).isNull("issuer"))
     }
 

@@ -94,6 +94,13 @@ fun SettingsScreen(
         Text("Motion", style = MaterialTheme.typography.titleMedium)
         MotionSection(motion = settings.motion, onChange = { onSettingsChange(settings.copy(motion = it)) })
 
+        Text("Anchors", style = MaterialTheme.typography.titleMedium)
+        AnchorsSection(
+            network = settings.stellarNetwork,
+            domains = settings.anchors.forNetwork(settings.stellarNetwork),
+            onChange = { onSettingsChange(settings.copy(anchors = settings.anchors.with(settings.stellarNetwork, it))) }
+        )
+
         Text("Stellar network", style = MaterialTheme.typography.titleMedium)
         NetworkSelector(
             selected = settings.stellarNetwork,

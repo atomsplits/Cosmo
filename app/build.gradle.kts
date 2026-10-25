@@ -63,7 +63,8 @@ dependencies {
     implementation(libs.pgpainless.core)
     implementation(libs.okhttp)
     implementation(libs.stellar.sdk)
-    implementation(libs.sumsub.mobile.sdk)
+    // Reads anchors' stellar.toml files. The Stellar SDK already uses it, but only at runtime.
+    implementation(libs.toml4j)
     implementation(libs.rhino)
     implementation(libs.zxing.core)
     testImplementation(libs.junit)

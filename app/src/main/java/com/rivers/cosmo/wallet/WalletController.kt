@@ -1,6 +1,8 @@
 package com.rivers.cosmo.wallet
 
 import java.math.BigDecimal
+import com.rivers.cosmo.anchor.AnchorService
+import com.rivers.cosmo.anchor.Sep24
 import com.rivers.cosmo.splits.BillSplit
 import com.rivers.cosmo.splits.SplitInvite
 import kotlinx.coroutines.CoroutineScope
@@ -43,6 +45,10 @@ class WalletController(
     }
 
     private val client = StellarClient(network)
+
+    /** Anchors sign the user in with this wallet's key (SEP-10); the key itself never leaves this class. */
+    val anchors = AnchorService(network) { keyPair }
+    private val directory = AssetDirectory(client, anchors)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val refreshLock = Mutex()
     private val _state = MutableStateFlow(State(network))
@@ -92,6 +98,44 @@ class WalletController(
         return result.recoverCatching { throw WalletException(describe(it), it) }
     }
 
+    /** The DEX's best price for selling [amount] of [from] for [to]; a null value means there's no market for it. */
+    suspend fun quote(from: TradeAsset, amount: BigDecimal, to: TradeAsset): Result<SwapQuote?> = withContext(Dispatchers.IO) {
+        runCatching { client.quoteSwap(from, amount, to) }.recoverCatching { throw WalletException(describe(it), it) }
+    }
+
+    /** Trades at the quoted price (or up to 1% worse) and returns the transaction hash. */
+    suspend fun swap(quote: SwapQuote): Result<String> {
+        val signer = keyPair ?: return Result.failure(WalletException("This device doesn't have your wallet key."))
+        val result = withContext(Dispatchers.IO) {
+            runCatching { client.swap(signer, quote, _state.value.balances) }
+        }
+        refresh()
+        return result.recoverCatching { throw WalletException(describe(it), it) }
+    }
+
+    /** Verified tokens with this code, e.g. BTC, from the user's anchors and their issuers' websites. */
+    suspend fun findAssets(code: String, anchorDomains: List<String>): Result<List<TradeAsset>> = withContext(Dispatchers.IO) {
+        runCatching { directory.find(code.trim().uppercase(), anchorDomains) }.recoverCatching { throw WalletException(describe(it), it) }
+    }
+
+    /** Pays an anchor for a SEP-24 withdrawal, to the account and memo it gave, and returns the transaction hash. */
+    suspend fun payWithdrawal(withdrawal: Sep24.Transaction, balance: WalletBalance): Result<String> {
+        val signer = keyPair ?: return Result.failure(WalletException("This device doesn't have your wallet key."))
+        val destination = withdrawal.withdrawAnchorAccount
+        val amount = withdrawal.amountIn
+        if (!withdrawal.needsPayment || destination == null || !StellarAddress.isValid(destination) || amount == null || amount.signum() <= 0) {
+            return Result.failure(WalletException("The anchor hasn't said where to send the funds yet."))
+        }
+        val result = withContext(Dispatchers.IO) {
+            runCatching {
+                val memo = withdrawal.withdrawMemo?.let { StellarClient.anchorMemo(withdrawal.withdrawMemoType, it) }
+                client.send(signer, destination, balance, amount, memo = null, typedMemo = memo)
+            }
+        }
+        refresh()
+        return result.recoverCatching { throw WalletException(describe(it), it) }
+    }
+
     /** Signs a bill split invite as the organizer, or returns null if this device doesn't have the wallet key. */
     fun signInvite(split: BillSplit): SplitInvite.Signed? = keyPair?.let { SplitInvite.sign(split, it) }
 
@@ -104,6 +148,7 @@ class WalletController(
     fun close() {
         scope.cancel()
         client.close()
+        anchors.close()
     }
 
     private suspend fun load() {

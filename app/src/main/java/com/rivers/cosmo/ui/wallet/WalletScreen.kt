@@ -32,7 +32,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.rivers.cosmo.kyc.KycController
 import com.rivers.cosmo.settings.BannerSettings
 import com.rivers.cosmo.settings.BannerStyle
 import com.rivers.cosmo.ui.banner.AnimatedBanner
@@ -43,7 +42,6 @@ import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
 import com.rivers.cosmo.ui.dashboard.DashboardModule
 import com.rivers.cosmo.ui.dashboard.DashboardToolbar
 import com.rivers.cosmo.ui.payments.PaymentRow
-import com.rivers.cosmo.ui.settings.KycSection
 import com.rivers.cosmo.wallet.AccountState
 import com.rivers.cosmo.wallet.StellarClient
 import com.rivers.cosmo.wallet.StellarNetwork
@@ -115,13 +113,11 @@ private val BANNER_HEIGHT = 140.dp
 /** The built-in wallet modules, in their default top-to-bottom order. */
 fun walletModules(
     state: WalletController.State,
-    kycState: KycController.State,
-    startingKyc: Boolean,
     onRefresh: () -> Unit,
     onFund: () -> Unit,
     onAddressCopied: () -> Unit,
-    onVerify: () -> Unit,
-    onRefreshKyc: () -> Unit,
+    /** Identity verification with the user's anchor (SEP-12). */
+    kycSection: @Composable () -> Unit,
     onLogOut: () -> Unit
 ): List<DashboardModule> = listOf(
     DashboardModule("network", "Network") { NetworkBadge(state.network) },
@@ -146,9 +142,7 @@ fun walletModules(
     },
     DashboardModule("refresh", "Refresh", isEmpty = state.keyMissing) { RefreshModule(state, onRefresh) },
     DashboardModule("activity", "Recent activity", isEmpty = state.keyMissing) { ActivityModule(state) },
-    DashboardModule("kyc", "Identity verification") {
-        KycSection(state = kycState, starting = startingKyc, onVerify = onVerify, onRefresh = onRefreshKyc)
-    },
+    DashboardModule("kyc", "Identity verification") { kycSection() },
     DashboardModule("logout", "Log out") {
         OutlinedButton(onClick = onLogOut, modifier = Modifier.fillMaxWidth()) { Text("Log out") }
     }

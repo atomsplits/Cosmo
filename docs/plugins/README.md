@@ -38,7 +38,7 @@ A read-only snapshot of the wallet:
 | `xlm` | `"1250.5"` | XLM balance as a string (exact) |
 | `balances` | `[{ code: "XLM", issuer: null, amount: "1250.5", value: 1250.5 }]` | `value` is the same amount as a number |
 | `payments` | `[{ incoming: true, amount: "5", value: 5, asset: "XLM", counterparty: "G…", date: "2026-10-25T14:00:00Z" }]` | Newest first, up to 20 |
-| `kyc` | `"APPROVED"` | Identity verification status, or `null` |
+| `kyc` | `"ACCEPTED"` | Identity verification status with the selected anchor (SEP-12: `ACCEPTED`, `PROCESSING`, `NEEDS_INFO`, `REJECTED`), or `null` |
 
 ## Building the UI: `ui`
 

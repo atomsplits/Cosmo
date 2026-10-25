@@ -1,8 +1,5 @@
 package com.rivers.cosmo.ui
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -35,12 +32,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.rivers.cosmo.chat.ChatService
+import com.rivers.cosmo.anchor.CashOutController
 import com.rivers.cosmo.kyc.KycController
-import com.rivers.cosmo.kyc.KycException
-import com.rivers.cosmo.kyc.SumsubLauncher
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.ui.chat.ChatScreen
 import com.rivers.cosmo.ui.chat.ConversationScreen
@@ -93,6 +88,7 @@ fun MainScreen(
     wallet: WalletController,
     chatService: ChatService,
     kyc: KycController,
+    cashOut: CashOutController,
     plugins: PluginHost,
     splits: SplitsController,
     /** Bill split invite links opened from outside the app (QR codes, shared links). */
@@ -119,9 +115,6 @@ fun MainScreen(
     // The Payments tab's current screen, as one value so screen changes can animate.
     val paymentsScreen = if (creatingPayment) PAYMENT_FORM else splitRoute ?: PAYMENTS_LIST
     val motion = LocalMotion.current
-    var startingKyc by remember { mutableStateOf(false) }
-    val sumsub = remember(kyc) { SumsubLauncher(tokenProvider = kyc::accessToken) }
-    val activity = LocalContext.current.findActivity()
     var sending by remember { mutableStateOf(false) }
     var sendError by remember { mutableStateOf<String?>(null) }
     // Bumped after each successful transfer so the form starts empty again.
@@ -132,17 +125,14 @@ fun MainScreen(
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
 
-    fun startVerification() {
-        startingKyc = true
-        scope.launch {
-            try {
-                val token = kyc.accessToken()
-                sumsub.present(activity, token, onClosed = kyc::refresh)
-            } catch (e: KycException) {
-                showMessage(e.message ?: "Couldn't start verification.")
-            }
-            startingKyc = false
-        }
+    val kycSection: @Composable () -> Unit = {
+        KycSection(
+            state = kycState,
+            onSelect = kyc::select,
+            onRefresh = kyc::refresh,
+            onSubmit = kyc::submit,
+            onMessage = ::showMessage
+        )
     }
 
     // Plugins see a read-only snapshot of the wallet, refreshed whenever it changes.
@@ -179,9 +169,9 @@ fun MainScreen(
         if (tab == MainTab.Payments) splits.refresh()
     }
 
-    // Check verification status whenever Settings opens, e.g. after a review finished.
-    LaunchedEffect(tab) {
-        if (tab == MainTab.Settings) kyc.refresh()
+    // Check verification status where it's shown (the dashboard and Settings), e.g. after a review finished.
+    LaunchedEffect(tab, kyc) {
+        if (tab == MainTab.Settings || tab == MainTab.Wallet) kyc.refresh()
     }
 
     fun send(address: String, balance: WalletBalance, amount: BigDecimal, memo: String?, onSent: () -> Unit) {
@@ -246,13 +236,10 @@ fun MainScreen(
                 MainTab.Wallet -> WalletDashboard(
                     modules = walletModules(
                         state = walletState,
-                        kycState = kycState,
-                        startingKyc = startingKyc,
                         onRefresh = wallet::refresh,
                         onFund = wallet::fundWithFriendbot,
                         onAddressCopied = { showMessage("Wallet address copied.") },
-                        onVerify = ::startVerification,
-                        onRefreshKyc = kyc::refresh,
+                        kycSection = kycSection,
                         onLogOut = onLogOut
                     ) + pluginModules(pluginState.widgets, onClick = plugins::click),
                     layoutStore = layoutStore,
@@ -356,11 +343,15 @@ fun MainScreen(
                 MainTab.Transfers -> key(transferFormKey) {
                     TransfersScreen(
                         state = walletState,
+                        wallet = wallet,
+                        cashOut = cashOut,
+                        anchorDomains = settings.anchors.forNetwork(walletState.network),
                         sending = sending,
                         error = sendError,
                         onTransfer = { address, balance, amount, memo ->
                             send(address, balance, amount, memo) { transferFormKey++ }
                         },
+                        onMessage = ::showMessage,
                         modifier = modifier
                     )
                 }
@@ -398,14 +389,7 @@ fun MainScreen(
                     settings = settings,
                     onSettingsChange = onSettingsChange,
                     modifier = modifier,
-                    identityVerification = {
-                        KycSection(
-                            state = kycState,
-                            starting = startingKyc,
-                            onVerify = ::startVerification,
-                            onRefresh = kyc::refresh
-                        )
-                    },
+                    identityVerification = kycSection,
                     plugins = {
                         PluginsSection(
                             plugins = pluginState.plugins,
@@ -419,11 +403,4 @@ fun MainScreen(
             }
         }
     }
-}
-
-/** LocalContext is often a wrapper around the Activity rather than the Activity itself. */
-private tailrec fun Context.findActivity(): Activity = when (this) {
-    is Activity -> this
-    is ContextWrapper -> baseContext.findActivity()
-    else -> error("No Activity in the context chain")
 }

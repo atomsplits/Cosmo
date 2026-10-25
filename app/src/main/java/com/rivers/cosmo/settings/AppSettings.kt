@@ -110,6 +110,25 @@ data class MotionSettings(
     val speed: MotionSpeed = MotionSpeed.Normal
 )
 
+/**
+ * The anchors (businesses that connect Stellar to banks) the user works with, by domain, for each
+ * network. They're used for cashing out, identity verification and finding tokens to trade.
+ */
+data class AnchorSettings(
+    val testnet: List<String> = DEFAULT_TESTNET,
+    val public: List<String> = emptyList()
+) {
+    fun forNetwork(network: StellarNetwork): List<String> = if (network == StellarNetwork.Public) public else testnet
+
+    fun with(network: StellarNetwork, domains: List<String>): AnchorSettings =
+        if (network == StellarNetwork.Public) copy(public = domains) else copy(testnet = domains)
+
+    companion object {
+        /** Stellar's own reference anchor: fake money, but every SEP works against it. */
+        val DEFAULT_TESTNET = listOf("testanchor.stellar.org")
+    }
+}
+
 /** The colors of the user's custom theme, as opaque ARGB ints. */
 data class CustomColors(
     val background: Int = 0xFF101418.toInt(),
@@ -126,7 +145,8 @@ data class AppSettings(
     val stellarNetwork: StellarNetwork = StellarNetwork.Testnet,
     val banner: BannerSettings = BannerSettings(),
     val background: BackgroundSettings = BackgroundSettings(),
-    val motion: MotionSettings = MotionSettings()
+    val motion: MotionSettings = MotionSettings(),
+    val anchors: AnchorSettings = AnchorSettings()
 )
 
 /** The Android emulator's address for the computer running it, where server/ runs by default. */
@@ -171,7 +191,11 @@ class SettingsStore(context: Context) {
                     entrance = enumOrDefault(prefs.getString(KEY_MOTION_ENTRANCE, null), default.entrance),
                     speed = enumOrDefault(prefs.getString(KEY_MOTION_SPEED, null), default.speed)
                 )
-            }
+            },
+            anchors = AnchorSettings(
+                testnet = prefs.getString(KEY_ANCHORS_TESTNET, null)?.let(::domainList) ?: AnchorSettings.DEFAULT_TESTNET,
+                public = prefs.getString(KEY_ANCHORS_PUBLIC, null)?.let(::domainList) ?: emptyList()
+            )
         )
     }
 
@@ -196,11 +220,15 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_MOTION_ENABLED, settings.motion.enabled)
             .putString(KEY_MOTION_ENTRANCE, settings.motion.entrance.name)
             .putString(KEY_MOTION_SPEED, settings.motion.speed.name)
+            .putString(KEY_ANCHORS_TESTNET, settings.anchors.testnet.joinToString("\n"))
+            .putString(KEY_ANCHORS_PUBLIC, settings.anchors.public.joinToString("\n"))
             .apply()
     }
 
     private companion object {
         const val PREFS_NAME = "cosmo_settings"
+        const val KEY_ANCHORS_TESTNET = "anchors_testnet"
+        const val KEY_ANCHORS_PUBLIC = "anchors_public"
         const val KEY_THEME = "theme_mode"
         const val KEY_FONT = "font"
         const val KEY_CUSTOM_BACKGROUND = "custom_background"
@@ -223,5 +251,7 @@ class SettingsStore(context: Context) {
 
         inline fun <reified T : Enum<T>> enumOrDefault(name: String?, default: T): T =
             enumValues<T>().firstOrNull { it.name == name } ?: default
+
+        fun domainList(stored: String): List<String> = stored.lines().map { it.trim() }.filter { it.isNotEmpty() }
     }
 }

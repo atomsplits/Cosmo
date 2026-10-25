@@ -5,7 +5,9 @@ import java.math.BigDecimal
 import okhttp3.HttpUrl.Companion.toHttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okio.ByteString.Companion.decodeBase64
 import org.stellar.sdk.Asset
+import org.stellar.sdk.ChangeTrustAsset
 import org.stellar.sdk.KeyPair
 import org.stellar.sdk.Memo
 import org.stellar.sdk.Network
@@ -16,7 +18,9 @@ import org.stellar.sdk.TransactionBuilderAccount
 import org.stellar.sdk.exception.AccountRequiresMemoException
 import org.stellar.sdk.exception.BadRequestException
 import org.stellar.sdk.exception.NetworkException
+import org.stellar.sdk.operations.ChangeTrustOperation
 import org.stellar.sdk.operations.CreateAccountOperation
+import org.stellar.sdk.operations.PathPaymentStrictSendOperation
 import org.stellar.sdk.operations.PaymentOperation
 import org.stellar.sdk.requests.RequestBuilder
 import org.stellar.sdk.responses.operations.CreateAccountOperationResponse
@@ -63,6 +67,9 @@ data class PaymentRecord(
     /** The transaction's text memo, if it had one. */
     val memo: String? = null
 )
+
+/** A token found on the network by code, before checking who vouches for it. */
+data class IssuedAsset(val code: String, val issuer: String, val holders: Int, val tomlUrl: String?)
 
 /** A failure to show the user, already worded for them. */
 class WalletException(message: String, cause: Throwable? = null) : Exception(message, cause)
@@ -148,7 +155,7 @@ class StellarClient(val network: StellarNetwork) : Closeable {
     }
 
     /** Sends [amount] of [balance]'s asset to [destination] and returns the transaction hash. */
-    fun send(keyPair: KeyPair, destination: String, balance: WalletBalance, amount: BigDecimal, memo: String?): String = request {
+    fun send(keyPair: KeyPair, destination: String, balance: WalletBalance, amount: BigDecimal, memo: String?, typedMemo: Memo? = null): String = request {
         val source = try {
             server.loadAccount(keyPair.accountId)
         } catch (e: NetworkException) {
@@ -156,14 +163,57 @@ class StellarClient(val network: StellarNetwork) : Closeable {
             throw WalletException("Your account isn't activated yet, so it can't send anything.")
         }
         val destinationExists = account(destination) is AccountState.Active
-        val transaction = buildTransaction(network, source, keyPair, destination, balance, amount, memo, destinationExists)
+        val transaction = buildTransaction(network, source, keyPair, destination, balance, amount, memo, destinationExists, typedMemo)
+        submit(transaction)
+    }
+
+    /** The best price on the DEX right now for selling [amount] of [from] for [to], or null if there's no market. */
+    fun quoteSwap(from: TradeAsset, amount: BigDecimal, to: TradeAsset): SwapQuote? = request {
+        server.strictSendPaths()
+            .sourceAsset(from.asset)
+            .sourceAmount(amount.toPlainString())
+            .destinationAssets(listOf(to.asset))
+            .execute().records
+            .maxByOrNull { BigDecimal(it.destinationAmount) }
+            ?.let { SwapQuote(from, to, amount, BigDecimal(it.destinationAmount), it.path.orEmpty()) }
+    }
+
+    /** Makes the trade in [quote] and returns the transaction hash. */
+    fun swap(keyPair: KeyPair, quote: SwapQuote, holdings: List<WalletBalance>): String = request {
+        val source = try {
+            server.loadAccount(keyPair.accountId)
+        } catch (e: NetworkException) {
+            if (!isNotFound(e)) throw e
+            throw WalletException("Your account isn't activated yet, so it can't trade.")
+        }
+        val needsTrustline = !quote.to.isNative && holdings.none { quote.to.matches(it) }
+        submit(buildSwapTransaction(network, source, keyPair, quote, needsTrustline))
+    }
+
+    /** Submits a signed transaction and returns its hash. */
+    private fun submit(transaction: Transaction): String {
         try {
-            server.submitTransaction(transaction).hash
+            return server.submitTransaction(transaction).hash
         } catch (e: AccountRequiresMemoException) {
             throw WalletException("This address needs a memo (exchanges use it to find your account). Add one and try again.", e)
         } catch (e: BadRequestException) {
             throw WalletException(describeFailure(e), e)
         }
+    }
+
+    /** All the issuers of tokens with this [code], most widely held first (Horizon's /assets). */
+    fun issuersOf(code: String, limit: Int = 200): List<IssuedAsset> = request {
+        server.assets().assetCode(code).limit(limit).execute().records
+            .filter { it.assetIssuer != null }
+            .map { asset ->
+                IssuedAsset(
+                    code = asset.assetCode,
+                    issuer = asset.assetIssuer,
+                    holders = asset.accounts?.authorized ?: 0,
+                    tomlUrl = asset.links?.toml?.href?.takeIf { it.startsWith("https://") }
+                )
+            }
+            .sortedByDescending { it.holders }
     }
 
     override fun close() {
@@ -213,7 +263,9 @@ class StellarClient(val network: StellarNetwork) : Closeable {
             balance: WalletBalance,
             amount: BigDecimal,
             memo: String?,
-            destinationExists: Boolean
+            destinationExists: Boolean,
+            /** An id or hash memo, as anchors ask for; replaces [memo] when set. */
+            typedMemo: Memo? = null
         ): Transaction {
             if (destination == keyPair.accountId) throw WalletException("You can't send to your own address.")
             val operation = if (destinationExists) {
@@ -229,11 +281,56 @@ class StellarClient(val network: StellarNetwork) : Closeable {
                 .addOperation(operation)
                 .setBaseFee(BASE_FEE)
                 .setTimeout(TIMEOUT_SECONDS)
-            memo?.trim()?.takeIf { it.isNotEmpty() }?.let { text ->
+            if (typedMemo != null) builder.addMemo(typedMemo)
+            else memo?.trim()?.takeIf { it.isNotEmpty() }?.let { text ->
                 if (text.toByteArray(Charsets.UTF_8).size > MAX_MEMO_BYTES) throw WalletException("Memos can be at most $MAX_MEMO_BYTES characters.")
                 builder.addMemo(Memo.text(text))
             }
             return builder.build().also { it.sign(keyPair) }
+        }
+
+        /** The most a trustline can hold: Stellar's maximum amount. */
+        private val MAX_TRUST_LIMIT = BigDecimal("922337203685.4775807")
+
+        /**
+         * Builds and signs a trade: a path payment to the user's own account, which sells exactly
+         * the quoted amount and fails rather than receive less than [SwapQuote.minimumReceived].
+         * When the user doesn't hold [SwapQuote.to] yet, the same transaction first adds a trustline
+         * for it (which sets aside 0.5 XLM), so either both happen or neither does.
+         */
+        fun buildSwapTransaction(
+            network: StellarNetwork,
+            source: TransactionBuilderAccount,
+            keyPair: KeyPair,
+            quote: SwapQuote,
+            needsTrustline: Boolean
+        ): Transaction {
+            if (quote.from.key == quote.to.key) throw WalletException("Pick two different assets to trade.")
+            val builder = TransactionBuilder(source, network.passphrase).setBaseFee(BASE_FEE).setTimeout(TIMEOUT_SECONDS)
+            if (needsTrustline) {
+                builder.addOperation(ChangeTrustOperation.builder().asset(ChangeTrustAsset(quote.to.asset)).limit(MAX_TRUST_LIMIT).build())
+            }
+            builder.addOperation(
+                PathPaymentStrictSendOperation.builder()
+                    .sendAsset(quote.from.asset)
+                    .sendAmount(quote.sendAmount)
+                    .destination(keyPair.accountId)
+                    .destAsset(quote.to.asset)
+                    .destMin(quote.minimumReceived)
+                    .path(quote.path.toTypedArray())
+                    .build()
+            )
+            return builder.build().also { it.sign(keyPair) }
+        }
+
+        /** The memo an anchor asks for: SEP-24 gives its type ("text", "id" or "hash", base64) and value. */
+        fun anchorMemo(type: String?, value: String): Memo = when (type) {
+            "id" -> Memo.id(value.toBigIntegerOrNull()?.takeIf { it.signum() >= 0 && it.bitLength() <= 64 } ?: throw WalletException("The anchor sent an invalid memo."))
+            "hash" -> Memo.hash(value.decodeBase64()?.toByteArray()?.takeIf { it.size == 32 } ?: throw WalletException("The anchor sent an invalid memo."))
+            else -> {
+                if (value.toByteArray(Charsets.UTF_8).size > MAX_MEMO_BYTES) throw WalletException("The anchor sent an invalid memo.")
+                Memo.text(value)
+            }
         }
 
         /** Explains Horizon's result codes, see developers.stellar.org/docs/data/horizon/api-reference/errors/result-codes. */
@@ -242,6 +339,9 @@ class StellarClient(val network: StellarNetwork) : Closeable {
             val operationCode = codes?.operationsResultCodes?.firstOrNull { it != "op_success" }
             return when (operationCode ?: codes?.transactionResultCode) {
                 "op_underfunded" -> "You don't have enough of that asset to send this amount."
+                "op_under_dest_min" -> "The price moved before your trade went through. Get a new quote and try again."
+                "op_too_few_offers" -> "There isn't enough on offer to fill this trade right now. Try a smaller amount."
+                "op_cross_self" -> "This trade would fill one of your own offers."
                 "op_low_reserve" -> "This would take your XLM below the minimum balance your account must keep."
                 "op_no_trust" -> "The recipient can't receive this asset yet (they need to add a trustline for it)."
                 "op_not_authorized", "op_src_not_authorized" -> "The asset's issuer hasn't authorised this payment."
