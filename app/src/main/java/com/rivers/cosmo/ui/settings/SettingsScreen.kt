@@ -91,6 +91,9 @@ fun SettingsScreen(
         Text("Background", style = MaterialTheme.typography.titleMedium)
         BackgroundSection(background = settings.background, onChange = { onSettingsChange(settings.copy(background = it)) })
 
+        Text("Motion", style = MaterialTheme.typography.titleMedium)
+        MotionSection(motion = settings.motion, onChange = { onSettingsChange(settings.copy(motion = it)) })
+
         Text("Stellar network", style = MaterialTheme.typography.titleMedium)
         NetworkSelector(
             selected = settings.stellarNetwork,

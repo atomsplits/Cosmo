@@ -45,6 +45,8 @@ import com.rivers.cosmo.ui.auth.LogInScreen
 import com.rivers.cosmo.ui.auth.SignUpScreen
 import com.rivers.cosmo.ui.auth.WelcomeScreen
 import com.rivers.cosmo.ui.background.AppBackground
+import com.rivers.cosmo.ui.motion.LocalMotion
+import com.rivers.cosmo.ui.motion.rememberMotion
 import com.rivers.cosmo.ui.theme.CosmoTheme
 import com.rivers.cosmo.ui.theme.fontFamily
 import com.rivers.cosmo.ui.theme.palette
@@ -82,7 +84,10 @@ class Main : ComponentActivity() {
                 // The background is drawn once behind everything; screens are transparent over it.
                 // With no opaque surface underneath, text would fall back to Compose's default black,
                 // so give everything the theme's text color.
-                CompositionLocalProvider(LocalContentColor provides MaterialTheme.colorScheme.onBackground) {
+                CompositionLocalProvider(
+                    LocalContentColor provides MaterialTheme.colorScheme.onBackground,
+                    LocalMotion provides rememberMotion(settings.motion)
+                ) {
                     Box(Modifier.fillMaxSize()) {
                         AppBackground(settings.background, Modifier.fillMaxSize())
                         CosmoApp(

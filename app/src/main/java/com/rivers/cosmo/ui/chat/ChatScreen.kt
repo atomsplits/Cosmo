@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.auth.UserIdGenerator
 import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.ui.components.FormColumn
+import com.rivers.cosmo.ui.motion.entrance
 
 @Composable
 fun ChatScreen(
@@ -104,9 +105,10 @@ fun ChatScreen(
             Text("Conversations", style = MaterialTheme.typography.titleMedium)
             state.conversations.values
                 .sortedByDescending { conversation -> conversation.messages.lastOrNull()?.sentAt ?: 0L }
-                .forEach { conversation ->
+                .forEachIndexed { i, conversation ->
                     Card(
                         modifier = Modifier
+                            .entrance(i)
                             .fillMaxWidth()
                             .clickable { onOpenConversation(conversation.contactId) }
                     ) {

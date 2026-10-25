@@ -39,6 +39,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.chat.ChatService
+import com.rivers.cosmo.ui.motion.LocalMotion
 import java.text.DateFormat
 import java.util.Date
 
@@ -54,6 +55,7 @@ fun ConversationScreen(
     var showFingerprint by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
     val canSend = online && !conversation.keyChanged
+    val motion = LocalMotion.current
 
     LaunchedEffect(conversation.messages.size) {
         if (conversation.messages.isNotEmpty()) listState.animateScrollToItem(conversation.messages.lastIndex)
@@ -112,7 +114,10 @@ fun ConversationScreen(
             contentPadding = PaddingValues(16.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            items(conversation.messages, key = { it.id }) { message -> MessageBubble(message) }
+            items(conversation.messages, key = { it.id }) { message ->
+                // New messages slide in and the rest glide up; replaying an entrance on scroll would be distracting.
+                MessageBubble(message, if (motion.enabled) Modifier.animateItem() else Modifier)
+            }
         }
 
         Row(
@@ -142,7 +147,7 @@ fun ConversationScreen(
 }
 
 @Composable
-private fun MessageBubble(message: ChatService.ChatMessage) {
+private fun MessageBubble(message: ChatService.ChatMessage, modifier: Modifier = Modifier) {
     val time = DateFormat.getTimeInstance(DateFormat.SHORT).format(Date(message.sentAt))
     val status = when (message.status) {
         ChatService.Status.Sending -> "Sending…"
@@ -151,7 +156,7 @@ private fun MessageBubble(message: ChatService.ChatMessage) {
         ChatService.Status.Failed -> "Not sent"
         ChatService.Status.Received -> if (message.verified) null else "⚠ Signature not verified"
     }
-    Box(Modifier.fillMaxWidth(), contentAlignment = if (message.outgoing) Alignment.CenterEnd else Alignment.CenterStart) {
+    Box(modifier.fillMaxWidth(), contentAlignment = if (message.outgoing) Alignment.CenterEnd else Alignment.CenterStart) {
         Column(
             horizontalAlignment = if (message.outgoing) Alignment.End else Alignment.Start,
             modifier = Modifier.widthIn(max = 300.dp)

@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.ui.components.FormColumn
 import com.rivers.cosmo.ui.components.PaymentPrefill
 import com.rivers.cosmo.ui.components.SendForm
+import com.rivers.cosmo.ui.motion.entrance
 import com.rivers.cosmo.wallet.PaymentRecord
 import com.rivers.cosmo.wallet.WalletBalance
 import com.rivers.cosmo.wallet.WalletController
@@ -43,7 +44,7 @@ fun PaymentsScreen(
         billSplits()
         Text("Recent activity", style = MaterialTheme.typography.titleMedium)
         when {
-            state.payments.isNotEmpty() -> state.payments.forEach { PaymentRow(it) }
+            state.payments.isNotEmpty() -> state.payments.forEachIndexed { i, payment -> PaymentRow(payment, Modifier.entrance(i)) }
             state.loading && state.account == null -> Text("Loading…", style = MaterialTheme.typography.bodyMedium)
             else -> Text("No payments yet.", style = MaterialTheme.typography.bodyMedium)
         }
@@ -51,8 +52,8 @@ fun PaymentsScreen(
 }
 
 @Composable
-fun PaymentRow(payment: PaymentRecord) {
-    Card(Modifier.fillMaxWidth()) {
+fun PaymentRow(payment: PaymentRecord, modifier: Modifier = Modifier) {
+    Card(modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
                 Text(if (payment.incoming) "Received from" else "Sent to", style = MaterialTheme.typography.labelMedium)

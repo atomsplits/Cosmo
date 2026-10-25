@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
@@ -43,6 +44,8 @@ import com.rivers.cosmo.kyc.SumsubLauncher
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.ui.chat.ChatScreen
 import com.rivers.cosmo.ui.chat.ConversationScreen
+import com.rivers.cosmo.ui.motion.LocalMotion
+import com.rivers.cosmo.ui.motion.screenTransition
 import com.rivers.cosmo.ui.payments.CreatePaymentScreen
 import com.rivers.cosmo.ui.payments.PaymentsScreen
 import com.rivers.cosmo.ui.settings.KycSection
@@ -77,6 +80,8 @@ private enum class MainTab(val label: String, val icon: ImageVector) {
     Settings("Settings", Icons.Filled.Settings)
 }
 
+private const val PAYMENTS_LIST = "list"
+private const val PAYMENT_FORM = "pay"
 private const val SPLIT_CREATE = "create"
 private const val SPLIT_JOIN = "join"
 
@@ -111,6 +116,9 @@ fun MainScreen(
     // Which bill split screen the Payments tab shows: null (the list), "create", "join" or a split's ID.
     var splitRoute by rememberSaveable { mutableStateOf<String?>(null) }
     var joinLink by rememberSaveable { mutableStateOf<String?>(null) }
+    // The Payments tab's current screen, as one value so screen changes can animate.
+    val paymentsScreen = if (creatingPayment) PAYMENT_FORM else splitRoute ?: PAYMENTS_LIST
+    val motion = LocalMotion.current
     var startingKyc by remember { mutableStateOf(false) }
     val sumsub = remember(kyc) { SumsubLauncher(tokenProvider = kyc::accessToken) }
     val activity = LocalContext.current.findActivity()
@@ -233,179 +241,182 @@ fun MainScreen(
             .padding(innerPadding)
             // Lets screens that use imePadding() avoid counting the navigation bar twice.
             .consumeWindowInsets(innerPadding)
-        when (tab) {
-            MainTab.Wallet -> WalletDashboard(
-                modules = walletModules(
-                    state = walletState,
-                    kycState = kycState,
-                    startingKyc = startingKyc,
-                    onRefresh = wallet::refresh,
-                    onFund = wallet::fundWithFriendbot,
-                    onAddressCopied = { showMessage("Wallet address copied.") },
-                    onVerify = ::startVerification,
-                    onRefreshKyc = kyc::refresh,
-                    onLogOut = onLogOut
-                ) + pluginModules(pluginState.widgets, onClick = plugins::click),
-                layoutStore = layoutStore,
-                banner = settings.banner,
-                network = walletState.network,
-                modifier = modifier
-            )
-            MainTab.Payments ->
-                if (creatingPayment) {
-                    // Keyed so a new suggested payment refills the form even if it's already open.
-                    key(paymentPrefill) { CreatePaymentScreen(
-                        prefill = paymentPrefill,
+        AnimatedContent(targetState = tab, transitionSpec = { screenTransition(motion) }, label = "tab") { shownTab ->
+            when (shownTab) {
+                MainTab.Wallet -> WalletDashboard(
+                    modules = walletModules(
                         state = walletState,
-                        sending = sending,
-                        error = sendError,
-                        onSubmit = { address, balance, amount, memo ->
-                            send(address, balance, amount, memo) {
+                        kycState = kycState,
+                        startingKyc = startingKyc,
+                        onRefresh = wallet::refresh,
+                        onFund = wallet::fundWithFriendbot,
+                        onAddressCopied = { showMessage("Wallet address copied.") },
+                        onVerify = ::startVerification,
+                        onRefreshKyc = kyc::refresh,
+                        onLogOut = onLogOut
+                    ) + pluginModules(pluginState.widgets, onClick = plugins::click),
+                    layoutStore = layoutStore,
+                    banner = settings.banner,
+                    network = walletState.network,
+                    modifier = modifier
+                )
+                MainTab.Payments -> AnimatedContent(targetState = paymentsScreen, transitionSpec = { screenTransition(motion) }, label = "payments") { screen ->
+                    if (screen == PAYMENT_FORM) {
+                        // Keyed so a new suggested payment refills the form even if it's already open.
+                        key(paymentPrefill) { CreatePaymentScreen(
+                            prefill = paymentPrefill,
+                            state = walletState,
+                            sending = sending,
+                            error = sendError,
+                            onSubmit = { address, balance, amount, memo ->
+                                send(address, balance, amount, memo) {
+                                    creatingPayment = false
+                                    paymentPrefill = null
+                                }
+                            },
+                            onBack = {
                                 creatingPayment = false
                                 paymentPrefill = null
+                                sendError = null
+                            },
+                            modifier = modifier
+                        ) }
+                    } else when (val route = screen.takeUnless { it == PAYMENTS_LIST }) {
+                        null -> PaymentsScreen(
+                            state = walletState,
+                            onCreatePayment = {
+                                sendError = null
+                                paymentPrefill = null
+                                creatingPayment = true
+                            },
+                            modifier = modifier,
+                            billSplits = {
+                                SplitsSection(
+                                    state = splitsState,
+                                    canCreate = walletState.address != null,
+                                    onCreate = { splitRoute = SPLIT_CREATE },
+                                    onOpen = { splitRoute = it },
+                                    onOpenInvite = { link ->
+                                        joinLink = link
+                                        splitRoute = SPLIT_JOIN
+                                    }
+                                )
                             }
-                        },
-                        onBack = {
-                            creatingPayment = false
-                            paymentPrefill = null
-                            sendError = null
-                        },
-                        modifier = modifier
-                    ) }
-                } else when (val route = splitRoute) {
-                    null -> PaymentsScreen(
-                        state = walletState,
-                        onCreatePayment = {
-                            sendError = null
-                            paymentPrefill = null
-                            creatingPayment = true
-                        },
-                        modifier = modifier,
-                        billSplits = {
-                            SplitsSection(
-                                state = splitsState,
-                                canCreate = walletState.address != null,
-                                onCreate = { splitRoute = SPLIT_CREATE },
-                                onOpen = { splitRoute = it },
-                                onOpenInvite = { link ->
-                                    joinLink = link
-                                    splitRoute = SPLIT_JOIN
-                                }
-                            )
-                        }
-                    )
-                    SPLIT_CREATE -> CreateSplitScreen(
-                        balances = walletState.balances,
-                        onCreate = { title, asset, shares ->
-                            splits.create(title, asset.code, asset.issuer, shares)
-                                .onSuccess { splitRoute = it.split.id }
-                                .onFailure { showMessage(it.message ?: "Couldn't create the split.") }
-                        },
-                        onBack = { splitRoute = null },
-                        modifier = modifier
-                    )
-                    SPLIT_JOIN -> JoinSplitScreen(
-                        link = joinLink.orEmpty(),
-                        onJoin = { share ->
-                            splits.join(joinLink.orEmpty(), share)
-                                .onSuccess { splitRoute = it.split.id }
-                                .onFailure { showMessage(it.message ?: "Couldn't join the split.") }
-                        },
-                        onBack = { splitRoute = null },
-                        modifier = modifier
-                    )
-                    else -> {
-                        val view = splitsState.splits.firstOrNull { it.split.id == route }
-                        if (view == null) {
-                            // The split was deleted (or never existed): go back to the list.
-                            LaunchedEffect(route) { splitRoute = null }
-                        } else {
-                            SplitDetailScreen(
-                                view = view,
-                                inviteLink = { share -> splits.inviteLink(view.entry, share) },
-                                onPay = { share ->
-                                    val split = view.split
-                                    val owed = split.shares[share].amount - (view.myStatus?.paid ?: BigDecimal.ZERO)
-                                    paymentPrefill = PaymentPrefill(split.organizerAddress, owed.toPlainString(), split.memoFor(share), split.assetCode, split.assetIssuer)
-                                    sendError = null
-                                    creatingPayment = true
-                                },
-                                onChooseShare = { share -> splits.chooseShare(view.split.id, share) },
-                                onRefresh = splits::refresh,
-                                onDelete = {
-                                    splits.delete(view.split.id)
-                                    splitRoute = null
-                                },
-                                onBack = { splitRoute = null },
-                                onMessage = ::showMessage,
-                                modifier = modifier
-                            )
+                        )
+                        SPLIT_CREATE -> CreateSplitScreen(
+                            balances = walletState.balances,
+                            onCreate = { title, asset, shares ->
+                                splits.create(title, asset.code, asset.issuer, shares)
+                                    .onSuccess { splitRoute = it.split.id }
+                                    .onFailure { showMessage(it.message ?: "Couldn't create the split.") }
+                            },
+                            onBack = { splitRoute = null },
+                            modifier = modifier
+                        )
+                        SPLIT_JOIN -> JoinSplitScreen(
+                            link = joinLink.orEmpty(),
+                            onJoin = { share ->
+                                splits.join(joinLink.orEmpty(), share)
+                                    .onSuccess { splitRoute = it.split.id }
+                                    .onFailure { showMessage(it.message ?: "Couldn't join the split.") }
+                            },
+                            onBack = { splitRoute = null },
+                            modifier = modifier
+                        )
+                        else -> {
+                            val view = splitsState.splits.firstOrNull { it.split.id == route }
+                            if (view == null) {
+                                // The split was deleted (or never existed): go back to the list.
+                                LaunchedEffect(route) { splitRoute = null }
+                            } else {
+                                SplitDetailScreen(
+                                    view = view,
+                                    inviteLink = { share -> splits.inviteLink(view.entry, share) },
+                                    onPay = { share ->
+                                        val split = view.split
+                                        val owed = split.shares[share].amount - (view.myStatus?.paid ?: BigDecimal.ZERO)
+                                        paymentPrefill = PaymentPrefill(split.organizerAddress, owed.toPlainString(), split.memoFor(share), split.assetCode, split.assetIssuer)
+                                        sendError = null
+                                        creatingPayment = true
+                                    },
+                                    onChooseShare = { share -> splits.chooseShare(view.split.id, share) },
+                                    onRefresh = splits::refresh,
+                                    onDelete = {
+                                        splits.delete(view.split.id)
+                                        splitRoute = null
+                                    },
+                                    onBack = { splitRoute = null },
+                                    onMessage = ::showMessage,
+                                    modifier = modifier
+                                )
+                            }
                         }
                     }
                 }
-            MainTab.Transfers -> key(transferFormKey) {
-                TransfersScreen(
-                    state = walletState,
-                    sending = sending,
-                    error = sendError,
-                    onTransfer = { address, balance, amount, memo ->
-                        send(address, balance, amount, memo) { transferFormKey++ }
+                MainTab.Transfers -> key(transferFormKey) {
+                    TransfersScreen(
+                        state = walletState,
+                        sending = sending,
+                        error = sendError,
+                        onTransfer = { address, balance, amount, memo ->
+                            send(address, balance, amount, memo) { transferFormKey++ }
+                        },
+                        modifier = modifier
+                    )
+                }
+                MainTab.Chat -> AnimatedContent(targetState = openContactId, transitionSpec = { screenTransition(motion) }, label = "chat") { contactId ->
+                    val conversation = contactId?.let { chatState.conversations[it] }
+                    if (conversation != null) {
+                        ConversationScreen(
+                            conversation = conversation,
+                            online = chatState.connection == ChatService.Connection.Online,
+                            onSend = { text -> chatService.send(conversation.contactId, text) },
+                            onBack = { openContactId = null },
+                            modifier = modifier
+                        )
+                    } else {
+                        ChatScreen(
+                            userId = userId,
+                            state = chatState,
+                            opening = openingChat,
+                            onStartChat = { cosmoId ->
+                                openingChat = true
+                                scope.launch {
+                                    chatService.openConversation(cosmoId)
+                                        .onSuccess { openContactId = cosmoId }
+                                        .onFailure { showMessage(it.message ?: "Couldn't start a chat with $cosmoId.") }
+                                    openingChat = false
+                                }
+                            },
+                            onOpenConversation = { openContactId = it },
+                            onReconnect = chatService::reconnect,
+                            modifier = modifier
+                        )
+                    }
+                }
+                MainTab.Settings -> SettingsScreen(
+                    settings = settings,
+                    onSettingsChange = onSettingsChange,
+                    modifier = modifier,
+                    identityVerification = {
+                        KycSection(
+                            state = kycState,
+                            starting = startingKyc,
+                            onVerify = ::startVerification,
+                            onRefresh = kyc::refresh
+                        )
                     },
-                    modifier = modifier
+                    plugins = {
+                        PluginsSection(
+                            plugins = pluginState.plugins,
+                            onInstall = plugins::install,
+                            onEnabledChange = plugins::setEnabled,
+                            onRemove = plugins::remove,
+                            onMessage = ::showMessage
+                        )
+                    }
                 )
             }
-            MainTab.Chat -> {
-                val conversation = openContactId?.let { chatState.conversations[it] }
-                if (conversation != null) {
-                    ConversationScreen(
-                        conversation = conversation,
-                        online = chatState.connection == ChatService.Connection.Online,
-                        onSend = { text -> chatService.send(conversation.contactId, text) },
-                        onBack = { openContactId = null },
-                        modifier = modifier
-                    )
-                } else {
-                    ChatScreen(
-                        userId = userId,
-                        state = chatState,
-                        opening = openingChat,
-                        onStartChat = { cosmoId ->
-                            openingChat = true
-                            scope.launch {
-                                chatService.openConversation(cosmoId)
-                                    .onSuccess { openContactId = cosmoId }
-                                    .onFailure { showMessage(it.message ?: "Couldn't start a chat with $cosmoId.") }
-                                openingChat = false
-                            }
-                        },
-                        onOpenConversation = { openContactId = it },
-                        onReconnect = chatService::reconnect,
-                        modifier = modifier
-                    )
-                }
-            }
-            MainTab.Settings -> SettingsScreen(
-                settings = settings,
-                onSettingsChange = onSettingsChange,
-                modifier = modifier,
-                identityVerification = {
-                    KycSection(
-                        state = kycState,
-                        starting = startingKyc,
-                        onVerify = ::startVerification,
-                        onRefresh = kyc::refresh
-                    )
-                },
-                plugins = {
-                    PluginsSection(
-                        plugins = pluginState.plugins,
-                        onInstall = plugins::install,
-                        onEnabledChange = plugins::setEnabled,
-                        onRemove = plugins::remove,
-                        onMessage = ::showMessage
-                    )
-                }
-            )
         }
     }
 }

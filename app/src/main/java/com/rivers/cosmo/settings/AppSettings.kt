@@ -86,6 +86,30 @@ data class BackgroundSettings(
     }
 }
 
+/** How elements appear: fading in while sliding from a direction, zooming, or not at all. */
+enum class EntranceStyle(val label: String) {
+    FadeUp("Fade up"),
+    FadeDown("Fade down"),
+    FadeLeft("Fade left"),
+    FadeRight("Fade right"),
+    Fade("Fade"),
+    Zoom("Zoom"),
+    None("None")
+}
+
+enum class MotionSpeed(val label: String, val factor: Float) {
+    Slow("Slow", 1.6f),
+    Normal("Normal", 1f),
+    Fast("Fast", 0.6f)
+}
+
+data class MotionSettings(
+    /** Master switch for all of the app's own animations. */
+    val enabled: Boolean = true,
+    val entrance: EntranceStyle = EntranceStyle.FadeUp,
+    val speed: MotionSpeed = MotionSpeed.Normal
+)
+
 /** The colors of the user's custom theme, as opaque ARGB ints. */
 data class CustomColors(
     val background: Int = 0xFF101418.toInt(),
@@ -101,7 +125,8 @@ data class AppSettings(
     // The test network until the user deliberately switches to real money.
     val stellarNetwork: StellarNetwork = StellarNetwork.Testnet,
     val banner: BannerSettings = BannerSettings(),
-    val background: BackgroundSettings = BackgroundSettings()
+    val background: BackgroundSettings = BackgroundSettings(),
+    val motion: MotionSettings = MotionSettings()
 )
 
 /** The Android emulator's address for the computer running it, where server/ runs by default. */
@@ -139,6 +164,13 @@ class SettingsStore(context: Context) {
                     colorB = prefs.getInt(KEY_BACKGROUND_COLOR_B, default.colorB),
                     strength = prefs.getFloat(KEY_BACKGROUND_STRENGTH, default.strength)
                 )
+            },
+            motion = MotionSettings().let { default ->
+                MotionSettings(
+                    enabled = prefs.getBoolean(KEY_MOTION_ENABLED, default.enabled),
+                    entrance = enumOrDefault(prefs.getString(KEY_MOTION_ENTRANCE, null), default.entrance),
+                    speed = enumOrDefault(prefs.getString(KEY_MOTION_SPEED, null), default.speed)
+                )
             }
         )
     }
@@ -161,6 +193,9 @@ class SettingsStore(context: Context) {
             .putInt(KEY_BACKGROUND_COLOR_A, settings.background.colorA)
             .putInt(KEY_BACKGROUND_COLOR_B, settings.background.colorB)
             .putFloat(KEY_BACKGROUND_STRENGTH, settings.background.strength)
+            .putBoolean(KEY_MOTION_ENABLED, settings.motion.enabled)
+            .putString(KEY_MOTION_ENTRANCE, settings.motion.entrance.name)
+            .putString(KEY_MOTION_SPEED, settings.motion.speed.name)
             .apply()
     }
 
@@ -182,6 +217,9 @@ class SettingsStore(context: Context) {
         const val KEY_BACKGROUND_COLOR_A = "background_color_a"
         const val KEY_BACKGROUND_COLOR_B = "background_color_b"
         const val KEY_BACKGROUND_STRENGTH = "background_strength"
+        const val KEY_MOTION_ENABLED = "motion_enabled"
+        const val KEY_MOTION_ENTRANCE = "motion_entrance"
+        const val KEY_MOTION_SPEED = "motion_speed"
 
         inline fun <reified T : Enum<T>> enumOrDefault(name: String?, default: T): T =
             enumValues<T>().firstOrNull { it.name == name } ?: default

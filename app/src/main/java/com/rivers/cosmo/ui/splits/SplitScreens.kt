@@ -45,6 +45,7 @@ import com.rivers.cosmo.splits.SplitsController
 import com.rivers.cosmo.ui.components.AmountField
 import com.rivers.cosmo.ui.components.AssetSelector
 import com.rivers.cosmo.ui.components.FormColumn
+import com.rivers.cosmo.ui.motion.entrance
 import com.rivers.cosmo.wallet.WalletBalance
 import com.rivers.cosmo.wallet.formatAmount
 import com.rivers.cosmo.wallet.parseAmount
@@ -71,8 +72,8 @@ fun SplitsSection(
             Button(onClick = onCreate, enabled = canCreate) { Text("Create bill split") }
             OutlinedButton(onClick = { pasting = true }) { Text("Open invite") }
         }
-        state.splits.sortedByDescending { it.split.createdAt }.forEach { view ->
-            Card(Modifier.fillMaxWidth().clickable { onOpen(view.split.id) }) {
+        state.splits.sortedByDescending { it.split.createdAt }.forEachIndexed { i, view ->
+            Card(Modifier.entrance(i).fillMaxWidth().clickable { onOpen(view.split.id) }) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(view.split.title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))

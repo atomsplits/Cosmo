@@ -1,6 +1,10 @@
 package com.rivers.cosmo.ui.dashboard
 
 import android.content.Context
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.snap
+import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,6 +55,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.settings.AppFont
+import com.rivers.cosmo.ui.motion.LocalMotion
+import com.rivers.cosmo.ui.motion.animatePlacement
+import com.rivers.cosmo.ui.motion.entrance
 import com.rivers.cosmo.ui.theme.fontFamily
 import com.rivers.cosmo.ui.theme.typographyFor
 import kotlin.math.roundToInt
@@ -133,6 +140,11 @@ fun Dashboard(
                     // Keyed so each module keeps its own state when the drawing order changes.
                     key(id) { ModuleFrame(
                         module = module,
+                        // Glide to new spots as other modules move, but follow the finger exactly
+                        // while this one is being dragged or resized. Modules cascade in on first show.
+                        modifier = Modifier
+                            .animatePlacement(follow = id !in dragOffsets && id !in widthDeltas)
+                            .entrance(index = visible.indexOf(module)),
                         scale = current(id).scale,
                         editing = editing,
                         onDrag = { delta ->
@@ -236,6 +248,7 @@ fun Dashboard(
 @Composable
 private fun ModuleFrame(
     module: DashboardModule,
+    modifier: Modifier,
     scale: Float,
     /** This module's own font, or null to use the app's font. */
     font: AppFont?,
@@ -253,9 +266,11 @@ private fun ModuleFrame(
     val dragEnd by rememberUpdatedState(onDragEnd)
     val resize by rememberUpdatedState(onResize)
     val resizeEnd by rememberUpdatedState(onResizeEnd)
+    val motion = LocalMotion.current
+    val animatedScale by animateFloatAsState(scale, if (motion.enabled) spring(stiffness = Spring.StiffnessMediumLow) else snap(), label = "module scale")
     val shape = RoundedCornerShape(12.dp)
     Column(
-        Modifier
+        modifier
             .then(if (editing) Modifier.border(2.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f), shape) else Modifier)
             .padding(if (editing) 4.dp else 0.dp)
     ) {
@@ -281,7 +296,7 @@ private fun ModuleFrame(
             }
         }
         Box {
-            Box(Modifier.scaledContent(scale)) {
+            Box(Modifier.scaledContent(animatedScale)) {
                 when {
                     !module.isEmpty -> WithFont(font) { module.content() }
                     editing -> Text(
