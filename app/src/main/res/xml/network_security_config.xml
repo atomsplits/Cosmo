@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Release builds only allow encrypted connections (wss://). Debug builds override this file
+     in src/debug so you can test against a chat server on your computer over plain ws://. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

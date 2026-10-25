@@ -34,6 +34,12 @@ android {
     buildFeatures {
         compose = true
     }
+    packaging {
+        resources {
+            // Bouncy Castle's jars (used by PGPainless) each ship these files, which would clash.
+            excludes += setOf("META-INF/versions/9/OSGI-INF/MANIFEST.MF", "META-INF/versions/9/module-info.class")
+        }
+    }
 }
 
 dependencies {
@@ -48,7 +54,11 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
     implementation(libs.androidx.compose.material.icons.extended)
+    implementation(libs.pgpainless.core)
+    implementation(libs.okhttp)
     testImplementation(libs.junit)
+    // Android's built-in org.json only exists on devices, so local unit tests need the real library.
+    testImplementation(libs.org.json)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
     androidTestImplementation(platform(libs.androidx.compose.bom))

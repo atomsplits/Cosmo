@@ -23,6 +23,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.rivers.cosmo.auth.AccountStore
 import com.rivers.cosmo.auth.SeedPhrase
+import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.settings.SettingsStore
 import com.rivers.cosmo.settings.ThemeMode
@@ -74,8 +75,6 @@ class Main : ComponentActivity() {
 
 private enum class AuthScreen { Welcome, SignUp, LogIn }
 
-private const val DEVELOPER_USER_ID = "DEVELOPER"
-
 @Composable
 fun CosmoApp(
     accountStore: AccountStore,
@@ -89,9 +88,20 @@ fun CosmoApp(
     // Developer shortcut: only offered in debug builds, never in the released app.
     val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
-    if (userId != null) {
+    val signedInUserId = userId
+    if (signedInUserId != null) {
+        // One chat connection per signed-in user; it restarts if the chat server setting changes.
+        val chatService = remember(signedInUserId, settings.chatServerUrl) {
+            ChatService(context.applicationContext, signedInUserId, settings.chatServerUrl)
+        }
+        DisposableEffect(chatService) {
+            chatService.start()
+            onDispose { chatService.close() }
+        }
         MainScreen(
+            userId = signedInUserId,
             wallet = Wallet.demo,
+            chatService = chatService,
             settings = settings,
             onSettingsChange = onSettingsChange,
             onLogOut = {
@@ -107,7 +117,7 @@ fun CosmoApp(
             accountStore = accountStore,
             seedPhrase = seedPhrase,
             onSignedIn = { userId = it },
-            onDeveloperSkip = if (isDebuggable) ({ userId = DEVELOPER_USER_ID }) else null
+            onDeveloperSkip = if (isDebuggable) ({ userId = accountStore.developerUserId() }) else null
         )
     }
 }

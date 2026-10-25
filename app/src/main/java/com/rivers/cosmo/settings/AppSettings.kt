@@ -49,8 +49,12 @@ data class CustomColors(
 data class AppSettings(
     val themeMode: ThemeMode = ThemeMode.System,
     val font: AppFont = AppFont.Default,
-    val customColors: CustomColors = CustomColors()
+    val customColors: CustomColors = CustomColors(),
+    val chatServerUrl: String = DEFAULT_CHAT_SERVER_URL
 )
+
+/** The Android emulator's address for the computer running it, where server/ runs by default. */
+const val DEFAULT_CHAT_SERVER_URL = "ws://10.0.2.2:8080/chat"
 
 /** Saves the user's appearance choices so they survive app restarts. */
 class SettingsStore(context: Context) {
@@ -65,7 +69,8 @@ class SettingsStore(context: Context) {
                 background = prefs.getInt(KEY_CUSTOM_BACKGROUND, defaults.background),
                 text = prefs.getInt(KEY_CUSTOM_TEXT, defaults.text),
                 accent = prefs.getInt(KEY_CUSTOM_ACCENT, defaults.accent)
-            )
+            ),
+            chatServerUrl = prefs.getString(KEY_CHAT_SERVER_URL, null) ?: DEFAULT_CHAT_SERVER_URL
         )
     }
 
@@ -76,6 +81,7 @@ class SettingsStore(context: Context) {
             .putInt(KEY_CUSTOM_BACKGROUND, settings.customColors.background)
             .putInt(KEY_CUSTOM_TEXT, settings.customColors.text)
             .putInt(KEY_CUSTOM_ACCENT, settings.customColors.accent)
+            .putString(KEY_CHAT_SERVER_URL, settings.chatServerUrl)
             .apply()
     }
 
@@ -86,6 +92,7 @@ class SettingsStore(context: Context) {
         const val KEY_CUSTOM_BACKGROUND = "custom_background"
         const val KEY_CUSTOM_TEXT = "custom_text"
         const val KEY_CUSTOM_ACCENT = "custom_accent"
+        const val KEY_CHAT_SERVER_URL = "chat_server_url"
 
         inline fun <reified T : Enum<T>> enumOrDefault(name: String?, default: T): T =
             enumValues<T>().firstOrNull { it.name == name } ?: default

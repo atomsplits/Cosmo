@@ -18,8 +18,11 @@ import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.selectableGroup
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -33,12 +36,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.settings.AppFont
 import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.settings.ColorMath
 import com.rivers.cosmo.settings.CustomColors
+import com.rivers.cosmo.settings.DEFAULT_CHAT_SERVER_URL
 import com.rivers.cosmo.settings.ThemeMode
 import com.rivers.cosmo.ui.components.ColorPickerDialog
 import com.rivers.cosmo.ui.components.ColorSwatch
@@ -68,6 +74,12 @@ fun SettingsScreen(
                 onChange = { onSettingsChange(settings.copy(customColors = it)) }
             )
         }
+
+        Text("Chat server", style = MaterialTheme.typography.titleMedium)
+        ChatServerField(
+            url = settings.chatServerUrl,
+            onSave = { onSettingsChange(settings.copy(chatServerUrl = it)) }
+        )
 
         Text("Font", style = MaterialTheme.typography.titleMedium)
         Column(Modifier.selectableGroup()) {
@@ -224,5 +236,41 @@ private fun CustomThemeEditor(colors: CustomColors, onChange: (CustomColors) -> 
                 editing = null
             }
         )
+    }
+}
+
+@Composable
+private fun ChatServerField(url: String, onSave: (String) -> Unit) {
+    var draft by rememberSaveable(url) { mutableStateOf(url) }
+    val trimmed = draft.trim()
+    val valid = trimmed.startsWith("ws://") || trimmed.startsWith("wss://")
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedTextField(
+            value = draft,
+            onValueChange = { draft = it },
+            label = { Text("Server address") },
+            singleLine = true,
+            isError = !valid,
+            supportingText = {
+                Text(
+                    if (valid) {
+                        "On the emulator use $DEFAULT_CHAT_SERVER_URL. On your phone, use your " +
+                            "computer's Wi-Fi address, e.g. ws://192.168.1.20:8080/chat."
+                    } else {
+                        "The address must start with ws:// or wss://"
+                    }
+                )
+            },
+            keyboardOptions = KeyboardOptions(
+                autoCorrectEnabled = false,
+                keyboardType = KeyboardType.Uri,
+                imeAction = ImeAction.Done
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Button(onClick = { onSave(trimmed) }, enabled = valid && trimmed != url) { Text("Save and reconnect") }
+            TextButton(onClick = { draft = DEFAULT_CHAT_SERVER_URL }) { Text("Reset") }
+        }
     }
 }

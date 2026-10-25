@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: allows plain ws:// so the app can reach a local chat server
+     (see server/README.md). Release builds use src/main's version, which requires wss://. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="true" />
+</network-security-config>

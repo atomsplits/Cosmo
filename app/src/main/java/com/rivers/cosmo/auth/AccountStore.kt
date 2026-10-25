@@ -49,6 +49,13 @@ class AccountStore(context: Context) {
         return matches
     }
 
+    /**
+     * A Cosmo ID for the debug-only "skip login" button, kept the same on this device so chat keys
+     * and contacts stay attached to it.
+     */
+    fun developerUserId(): String =
+        prefs.getString(KEY_DEVELOPER_ID, null) ?: newUserId().also { prefs.edit().putString(KEY_DEVELOPER_ID, it).apply() }
+
     fun logOut() {
         prefs.edit().remove(KEY_SESSION).apply()
     }
@@ -65,6 +72,7 @@ class AccountStore(context: Context) {
     private companion object {
         const val PREFS_NAME = "cosmo_accounts"
         const val KEY_SESSION = "session_user_id"
+        const val KEY_DEVELOPER_ID = "developer_user_id"
         const val SALT_BYTES = 16
         const val HASH_BITS = 256
         const val ITERATIONS = 100_000

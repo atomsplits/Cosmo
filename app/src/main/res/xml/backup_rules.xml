@@ -1,14 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!--
-   Sample backup rules file; uncomment and customize as necessary.
-   See https://developer.android.com/guide/topics/data/autobackup
-   for details.
-   Note: This file is ignored for devices older than API 31
-   See https://developer.android.com/about/versions/12/backup-restore
--->
+<!-- Backup rules for Android 11 and older. See data_extraction_rules.xml for Android 12+. -->
 <full-backup-content>
-    <!--
-   <include domain="sharedpref" path="."/>
-   <exclude domain="sharedpref" path="device.xml"/>
--->
+    <!-- Chat keys are encrypted with a key that never leaves this device's Android Keystore,
+         so a backed-up copy could never be decrypted on another device. -->
+    <exclude domain="file" path="pgp/" />
 </full-backup-content>
