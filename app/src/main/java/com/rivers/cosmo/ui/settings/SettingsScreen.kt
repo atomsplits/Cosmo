@@ -22,6 +22,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -45,6 +46,7 @@ import com.rivers.cosmo.settings.AppSettings
 import com.rivers.cosmo.settings.ColorMath
 import com.rivers.cosmo.settings.CustomColors
 import com.rivers.cosmo.settings.DEFAULT_CHAT_SERVER_URL
+import com.rivers.cosmo.settings.USB_CHAT_SERVER_URL
 import com.rivers.cosmo.settings.ThemeMode
 import com.rivers.cosmo.ui.components.ColorPickerDialog
 import com.rivers.cosmo.ui.components.ColorSwatch
@@ -269,9 +271,8 @@ private fun ChatServerField(url: String, onSave: (String) -> Unit) {
             supportingText = {
                 Text(
                     if (valid) {
-                        "Used for chat and identity verification. On the emulator use " +
-                            "$DEFAULT_CHAT_SERVER_URL. On your phone, use your " +
-                            "computer's Wi-Fi address, e.g. ws://192.168.1.20:8080/chat."
+                        "Used for chat and the marketplace. Running the server on your computer (see server/README.md)? " +
+                            "Pick a preset below, or use your computer's Wi-Fi address, e.g. ws://192.168.1.20:8080/chat."
                     } else {
                         "The address must start with ws:// or wss://"
                     }
@@ -284,10 +285,13 @@ private fun ChatServerField(url: String, onSave: (String) -> Unit) {
             ),
             modifier = Modifier.fillMaxWidth()
         )
+        // Presets for a server on the computer: the emulator reaches it at 10.0.2.2, and a phone on
+        // USB reaches it at localhost after `adb reverse tcp:8080 tcp:8080`.
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { onSave(trimmed) }, enabled = valid && trimmed != url) { Text("Save and reconnect") }
-            TextButton(onClick = { draft = DEFAULT_CHAT_SERVER_URL }) { Text("Reset") }
+            FilterChip(selected = trimmed == DEFAULT_CHAT_SERVER_URL, onClick = { draft = DEFAULT_CHAT_SERVER_URL }, label = { Text("Emulator") })
+            FilterChip(selected = trimmed == USB_CHAT_SERVER_URL, onClick = { draft = USB_CHAT_SERVER_URL }, label = { Text("Phone on USB") })
         }
+        Button(onClick = { onSave(trimmed) }, enabled = valid && trimmed != url) { Text("Save and reconnect") }
     }
 }
 
