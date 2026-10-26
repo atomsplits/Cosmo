@@ -148,7 +148,13 @@ data class AppSettings(
     val banner: BannerSettings = BannerSettings(),
     val background: BackgroundSettings = BackgroundSettings(),
     val motion: MotionSettings = MotionSettings(),
-    val anchors: AnchorSettings = AnchorSettings()
+    val anchors: AnchorSettings = AnchorSettings(),
+    /**
+     * Whether screenshots and screen recordings may show the recovery phrase screens (sign up and
+     * log in). Off protects the phrase from screen-capturing apps; [SettingsStore] turns it on by
+     * default only in debug builds, for recording demos and bug reports.
+     */
+    val allowScreenCapture: Boolean = false
 )
 
 /** The Android emulator's address for the computer running it, where server/ runs by default. */
@@ -160,6 +166,7 @@ const val USB_CHAT_SERVER_URL = "ws://localhost:8080/chat"
 /** Saves the user's settings so they survive app restarts. */
 class SettingsStore(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    private val debugBuild = (context.applicationInfo.flags and android.content.pm.ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
     fun load(): AppSettings {
         val defaults = CustomColors()
@@ -198,6 +205,7 @@ class SettingsStore(context: Context) {
                     speed = enumOrDefault(prefs.getString(KEY_MOTION_SPEED, null), default.speed)
                 )
             },
+            allowScreenCapture = prefs.getBoolean(KEY_ALLOW_SCREEN_CAPTURE, debugBuild),
             anchors = AnchorSettings(
                 testnet = prefs.getString(KEY_ANCHORS_TESTNET, null)?.let(::domainList) ?: AnchorSettings.DEFAULT_TESTNET,
                 public = prefs.getString(KEY_ANCHORS_PUBLIC, null)?.let(::domainList) ?: emptyList()
@@ -227,6 +235,7 @@ class SettingsStore(context: Context) {
             .putBoolean(KEY_MOTION_ENABLED, settings.motion.enabled)
             .putString(KEY_MOTION_ENTRANCE, settings.motion.entrance.name)
             .putString(KEY_MOTION_SPEED, settings.motion.speed.name)
+            .putBoolean(KEY_ALLOW_SCREEN_CAPTURE, settings.allowScreenCapture)
             .putString(KEY_ANCHORS_TESTNET, settings.anchors.testnet.joinToString("\n"))
             .putString(KEY_ANCHORS_PUBLIC, settings.anchors.public.joinToString("\n"))
             .apply()
@@ -234,6 +243,7 @@ class SettingsStore(context: Context) {
 
     private companion object {
         const val PREFS_NAME = "cosmo_settings"
+        const val KEY_ALLOW_SCREEN_CAPTURE = "allow_screen_capture"
         const val KEY_ANCHORS_TESTNET = "anchors_testnet"
         const val KEY_ANCHORS_PUBLIC = "anchors_public"
         const val KEY_THEME = "theme_mode"

@@ -41,6 +41,7 @@ import com.rivers.cosmo.market.MarketplaceController
 import com.rivers.cosmo.plugins.PluginHost
 import com.rivers.cosmo.splits.SplitInvite
 import com.rivers.cosmo.splits.SplitsController
+import com.rivers.cosmo.util.closeQuietly
 import kotlinx.coroutines.flow.MutableStateFlow
 import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
 import com.rivers.cosmo.settings.AppSettings
@@ -164,7 +165,7 @@ fun CosmoApp(
         }
         DisposableEffect(wallet) {
             wallet.start()
-            onDispose { wallet.close() }
+            onDispose { closeQuietly("wallet") { wallet.close() } }
         }
         // One chat connection per signed-in user; it restarts if the chat server setting changes.
         val chatService = remember(signedInUserId, settings.chatServerUrl) {
@@ -172,13 +173,13 @@ fun CosmoApp(
         }
         DisposableEffect(chatService) {
             chatService.start()
-            onDispose { chatService.close() }
+            onDispose { closeQuietly("chat") { chatService.close() } }
         }
         // Verification and cash-outs go through the anchors chosen in Settings, signed in with this wallet.
         val anchorDomains = settings.anchors.forNetwork(settings.stellarNetwork)
         val kyc = remember(wallet, anchorDomains) { KycController(wallet.anchors, anchorDomains) }
         DisposableEffect(kyc) {
-            onDispose { kyc.close() }
+            onDispose { closeQuietly("identity verification") { kyc.close() } }
         }
         val transfers = remember(wallet) { AnchorTransfersController(context.applicationContext, wallet, settings.stellarNetwork) }
         // Runs whenever someone's signed in, so a seller's phone can deliver sales without the tab open.
@@ -186,17 +187,17 @@ fun CosmoApp(
             MarketplaceController(context.applicationContext, signedInUserId, chatService, wallet, settings.stellarNetwork)
         }
         DisposableEffect(market) {
-            onDispose { market.close() }
+            onDispose { closeQuietly("marketplace") { market.close() } }
         }
         val plugins = remember(signedInUserId) { PluginHost(context.applicationContext) }
         DisposableEffect(plugins) {
             plugins.start()
-            onDispose { plugins.close() }
+            onDispose { closeQuietly("plugins") { plugins.close() } }
         }
         val layoutStore = remember { DashboardLayoutStore(context.applicationContext) }
         val splits = remember(signedInUserId, wallet) { SplitsController(context.applicationContext, signedInUserId, wallet) }
         DisposableEffect(splits) {
-            onDispose { splits.close() }
+            onDispose { closeQuietly("bill splits") { splits.close() } }
         }
         MainScreen(
             userId = signedInUserId,
@@ -228,6 +229,7 @@ fun CosmoApp(
             auth = auth,
             walletKeys = walletKeys,
             seedPhrase = seedPhrase,
+            allowScreenCapture = settings.allowScreenCapture,
             onSignedIn = { userId = it },
             onDeveloperSkip = if (isDebuggable) {
                 {
@@ -251,6 +253,7 @@ private fun AuthFlow(
     auth: AuthService,
     walletKeys: WalletKeyStore,
     seedPhrase: SeedPhrase,
+    allowScreenCapture: Boolean,
     onSignedIn: (userId: String) -> Unit,
     onDeveloperSkip: (() -> Unit)?
 ) {
@@ -278,6 +281,7 @@ private fun AuthFlow(
                 auth = auth,
                 walletKeys = walletKeys,
                 seedPhrase = seedPhrase,
+                allowScreenCapture = allowScreenCapture,
                 onSignedUp = onSignedIn,
                 onBack = { onScreenChange(AuthScreen.Welcome) },
                 modifier = modifier
@@ -286,6 +290,7 @@ private fun AuthFlow(
                 auth = auth,
                 walletKeys = walletKeys,
                 seedPhrase = seedPhrase,
+                allowScreenCapture = allowScreenCapture,
                 onLoggedIn = onSignedIn,
                 onBack = { onScreenChange(AuthScreen.Welcome) },
                 modifier = modifier

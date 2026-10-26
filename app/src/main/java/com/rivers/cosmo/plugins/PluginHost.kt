@@ -1,9 +1,8 @@
 package com.rivers.cosmo.plugins
 
 import android.content.Context
+import com.rivers.cosmo.util.backgroundScope
 import java.util.concurrent.Executors
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.asCoroutineDispatcher
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -39,7 +38,7 @@ class PluginHost(context: Context) {
     private val repository = PluginRepository(context)
     private val executor = Executors.newSingleThreadExecutor { Thread(it, "cosmo-plugins") }
     private val dispatcher = executor.asCoroutineDispatcher()
-    private val scope = CoroutineScope(SupervisorJob() + dispatcher)
+    private val scope = backgroundScope("plugins", dispatcher)
     private val engine = PluginEngine(repository)
     private var dataJson = "{}"
     private val loadErrors = HashMap<String, String>()

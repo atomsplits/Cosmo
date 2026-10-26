@@ -106,6 +106,12 @@ fun SettingsScreen(
                 onChange = { onSettingsChange(settings.copy(anchors = settings.anchors.with(settings.stellarNetwork, it))) }
             )
         },
+        section("privacy", "Privacy") {
+            PrivacySection(
+                allowScreenCapture = settings.allowScreenCapture,
+                onChange = { onSettingsChange(settings.copy(allowScreenCapture = it)) }
+            )
+        },
         section("network", "Stellar network") {
             NetworkSelector(
                 selected = settings.stellarNetwork,

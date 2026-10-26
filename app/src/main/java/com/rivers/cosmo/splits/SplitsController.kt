@@ -1,11 +1,10 @@
 package com.rivers.cosmo.splits
 
 import android.content.Context
+import com.rivers.cosmo.util.backgroundScope
 import com.rivers.cosmo.wallet.WalletController
 import java.math.BigDecimal
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -36,7 +35,7 @@ class SplitsController(context: Context, private val cosmoId: String, private va
 
     private val prefs = context.getSharedPreferences("cosmo_splits", Context.MODE_PRIVATE)
     private val key = "splits_$cosmoId"
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = backgroundScope("bill splits", Dispatchers.IO)
     private val _state = MutableStateFlow(State(load().map { SplitView(it, emptyStatuses(it)) }))
     val state: StateFlow<State> = _state.asStateFlow()
 

@@ -5,13 +5,12 @@ import com.rivers.cosmo.chat.crypto.KeyVault
 import com.rivers.cosmo.chat.crypto.Pgp
 import com.rivers.cosmo.market.Listing
 import com.rivers.cosmo.market.MarketProtocol
+import com.rivers.cosmo.util.backgroundScope
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -77,7 +76,7 @@ class ChatService(
 
     private val vault = KeyVault(context)
     private val contacts = ContactKeys(context)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = backgroundScope("chat", Dispatchers.Default)
     private val client = OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS).build()
     private val pendingKeyRequests = ConcurrentHashMap<String, CompletableDeferred<String?>>()
     private val pendingListings = ConcurrentHashMap<String, CompletableDeferred<List<Listing>>>()

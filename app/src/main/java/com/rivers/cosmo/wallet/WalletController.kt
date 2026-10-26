@@ -1,13 +1,12 @@
 package com.rivers.cosmo.wallet
 
+import com.rivers.cosmo.util.backgroundScope
 import java.math.BigDecimal
 import com.rivers.cosmo.anchor.AnchorService
 import com.rivers.cosmo.anchor.Sep24
 import com.rivers.cosmo.splits.BillSplit
 import com.rivers.cosmo.splits.SplitInvite
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -49,7 +48,7 @@ class WalletController(
     /** Anchors sign the user in with this wallet's key (SEP-10); the key itself never leaves this class. */
     val anchors = AnchorService(network) { keyPair }
     private val directory = AssetDirectory(client, anchors)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = backgroundScope("wallet", Dispatchers.IO)
     private val refreshLock = Mutex()
     private val _state = MutableStateFlow(State(network))
     val state: StateFlow<State> = _state.asStateFlow()
