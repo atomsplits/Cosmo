@@ -154,6 +154,9 @@ data class AppSettings(
 /** The Android emulator's address for the computer running it, where server/ runs by default. */
 const val DEFAULT_CHAT_SERVER_URL = "ws://10.0.2.2:8080/chat"
 
+/** A phone connected by USB, after `adb reverse tcp:8080 tcp:8080` forwards its port 8080 to the computer. */
+const val USB_CHAT_SERVER_URL = "ws://localhost:8080/chat"
+
 /** Saves the user's settings so they survive app restarts. */
 class SettingsStore(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)

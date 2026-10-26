@@ -12,6 +12,43 @@ val localProperties = java.util.Properties().apply {
 fun buildSetting(property: String, environment: String): String =
     (localProperties.getProperty(property) ?: System.getenv(environment) ?: "").trim().replace("\"", "")
 
+/**
+ * The project's API address. Supabase also shows a Postgres connection string
+ * (postgresql://postgres:…@db.<ref>.supabase.co:5432/postgres), which is easy to paste here by
+ * mistake: the app can't use it, and it may contain the database password. So it's turned into
+ * the API address (https://<ref>.supabase.co), and nothing else from it is kept.
+ */
+fun supabaseApiUrl(setting: String): String {
+    if (setting.isEmpty()) return ""
+    if (setting.startsWith("postgres://") || setting.startsWith("postgresql://")) {
+        val ref = Regex("""@db\.([a-z0-9]+)\.supabase\.co""").find(setting)?.groupValues?.get(1)
+            ?: throw GradleException("supabase.url is a database connection string. Use the project URL from Project Settings → API (https://<ref>.supabase.co).")
+        logger.warn("supabase.url is the database connection string; using the API URL https://$ref.supabase.co instead. Please put that in local.properties, and don't keep the database password there.")
+        return "https://$ref.supabase.co"
+    }
+    if (!setting.startsWith("https://")) throw GradleException("supabase.url must be the project URL, like https://<ref>.supabase.co")
+    return setting.trimEnd('/')
+}
+
+/** Refuses keys that must never ship in an app, and checks the anon key belongs to this project. */
+fun checkSupabaseKey(key: String, url: String) {
+    if (key.isEmpty()) return
+    if (key.startsWith("sb_secret_")) throw GradleException("supabase.anonKey is a secret key. Use the anon (or publishable) key: secret keys bypass all security and must never be in the app.")
+    val parts = key.split('.')
+    if (parts.size != 3) return // a new-style publishable key (sb_publishable_…)
+    val payload = runCatching { String(java.util.Base64.getUrlDecoder().decode(parts[1])) }.getOrNull()
+        ?: throw GradleException("supabase.anonKey isn't a valid key. Copy the anon key from Project Settings → API.")
+    val role = Regex(""""role"\s*:\s*"([^"]+)"""").find(payload)?.groupValues?.get(1)
+    if (role != "anon") throw GradleException("supabase.anonKey has role '$role'. Use the anon key, never service_role: it bypasses all security and must never be in the app.")
+    val ref = Regex(""""ref"\s*:\s*"([^"]+)"""").find(payload)?.groupValues?.get(1)
+    if (ref != null && url.isNotEmpty() && !url.startsWith("https://$ref.")) {
+        throw GradleException("supabase.anonKey is for project '$ref', but supabase.url is $url.")
+    }
+}
+
+val supabaseUrl = supabaseApiUrl(buildSetting("supabase.url", "SUPABASE_URL"))
+val supabaseAnonKey = buildSetting("supabase.anonKey", "SUPABASE_ANON_KEY").also { checkSupabaseKey(it, supabaseUrl) }
+
 android {
     namespace = "com.rivers.cosmo"
     compileSdk {
@@ -29,8 +66,8 @@ android {
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
-        buildConfigField("String", "SUPABASE_URL", "\"${buildSetting("supabase.url", "SUPABASE_URL")}\"")
-        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${buildSetting("supabase.anonKey", "SUPABASE_ANON_KEY")}\"")
+        buildConfigField("String", "SUPABASE_URL", "\"$supabaseUrl\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"$supabaseAnonKey\"")
     }
 
     buildTypes {

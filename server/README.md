@@ -31,6 +31,23 @@ Then point the app at it in **Settings → Cosmo server**:
 Plain `ws://` only works in debug builds (see `app/src/debug/res/xml/network_security_config.xml`).
 Release builds require `wss://`, so deploy the relay behind TLS before shipping.
 
+### Testing on your phone
+
+The server runs on your computer; the app connects to it.
+
+1. Start it: `./gradlew -p server run`. It prints the addresses to use.
+2. In the app, open Settings → Cosmo server, choose one of these, then tap **Save and reconnect**:
+   - **Phone on USB** (easiest): with the phone plugged in and USB debugging on, run
+     `adb reverse tcp:8080 tcp:8080` on the computer (again after each reconnect), then pick the
+     "Phone on USB" preset (`ws://localhost:8080/chat`).
+   - **Emulator**: the "Emulator" preset (`ws://10.0.2.2:8080/chat`).
+   - **Same Wi-Fi**: the `ws://192.168.…:8080/chat` address the server printed. If it doesn't
+     connect, allow Java through the computer's firewall for private networks.
+3. Chat → the status shows "Connected". To try chat and the marketplace between two people, use
+   two devices (or a phone and the emulator) with different accounts.
+
+Plain `ws://` only works in debug builds; release builds need `wss://` (a server with TLS).
+
 ## How it works
 
 Each user has a PGP key pair generated on their phone the first time they open chat. The secret

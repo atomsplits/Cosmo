@@ -10,16 +10,39 @@ applied automatically when they reach the production branch; otherwise run `supa
 
 ## Connecting the app
 
-The app needs the project's URL and its **anon (public) key**, from Project Settings → API. Put them
-in `local.properties` at the repository root (it's git-ignored), then rebuild:
+The app needs the project's **API URL** and its **anon (public) key**, from Project Settings → API
+(the legacy anon key, or a new `sb_publishable_…` key). Put them in `local.properties` at the
+repository root (it's git-ignored), then rebuild:
 
 ```properties
 supabase.url=https://<project-ref>.supabase.co
 supabase.anonKey=<anon key>
 ```
 
-On CI, set `SUPABASE_URL` and `SUPABASE_ANON_KEY` instead. Never use the `service_role` key in the
-app. Without these settings the app keeps accounts on the device only, as it did before.
+The API URL is not the database connection string
+(`postgresql://postgres:…@db.<project-ref>.supabase.co:5432/postgres`): the app doesn't talk to
+Postgres directly, and that string can contain the database password, which must never go in the
+app. If it's pasted by mistake, the build uses the API URL from it instead and warns. The build
+also refuses `service_role` and `sb_secret_…` keys (they bypass all security), and an anon key
+from a different project than the URL.
+
+On CI, set `SUPABASE_URL` and `SUPABASE_ANON_KEY` instead. Without these settings the app keeps
+accounts on the device only, as it did before.
+
+### Checking the setup
+
+Once the migration is applied, this should print `"unknown"` (no such account yet):
+
+```sh
+KEY='<anon key>'
+curl -s -X POST 'https://<project-ref>.supabase.co/rest/v1/rpc/verify_account' \
+  -H "apikey: $KEY" -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  -d '{"p_cosmo_id":"COSMO-AAAA-AAAA","p_verifier":"00"}'
+```
+
+- `"unknown"`: everything's set up.
+- `Could not find the function public.verify_account`: the migration hasn't been applied yet.
+- `Invalid API key`: the key is wrong or from another project.
 
 ## How accounts are stored
 
