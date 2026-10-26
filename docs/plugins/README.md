@@ -4,7 +4,15 @@ Plugins are JavaScript files that add widgets to the Wallet tab. Install one in
 **Settings → Plugins → Import script** (pick a `.js` file) or **Paste script**. After that, its
 widgets appear on the Wallet tab, where you can move and resize them like any other module.
 
-See [`examples/`](examples) for complete plugins you can install as they are.
+See [`examples/`](examples) for complete plugins you can install as they are:
+
+| Example | Shows |
+| --- | --- |
+| [`savings-goal.js`](examples/savings-goal.js) | Progress toward an XLM target you set |
+| [`activity-summary.js`](examples/activity-summary.js) | Money in and out from recent payments |
+| [`tip-jar.js`](examples/tip-jar.js) | Buttons that suggest a payment |
+| [`xlm-price.js`](examples/xlm-price.js) | Live XLM price, 24-hour sparkline, your balance's worth, and a price alert |
+| [`cosmo-pet.js`](examples/cosmo-pet.js) | Nova, a virtual pet that grows over the days and cheers up when you get paid |
 
 ## A first widget
 
@@ -39,6 +47,7 @@ A read-only snapshot of the wallet:
 | `balances` | `[{ code: "XLM", issuer: null, amount: "1250.5", value: 1250.5 }]` | `value` is the same amount as a number |
 | `payments` | `[{ incoming: true, amount: "5", value: 5, asset: "XLM", counterparty: "G…", date: "2026-10-25T14:00:00Z" }]` | Newest first, up to 20 |
 | `kyc` | `"ACCEPTED"` | Identity verification status with the selected anchor (SEP-12: `ACCEPTED`, `PROCESSING`, `NEEDS_INFO`, `REJECTED`), or `null` |
+| `price` | `{ usd: 0.1234, change24h: -1.8, history: [0.1256, …, 0.1234], updatedAt: "2026-10-26T09:00:00Z", source: "Stellar DEX (XLM/USDC)" }` | XLM's price in US dollars from Stellar's exchange (public network, also shown on testnet), refreshed every minute. `history` is hourly closing prices over the last day, oldest first; `change24h` is a percent or `null`. `price` is `null` until the first fetch |
 
 ## Building the UI: `ui`
 
