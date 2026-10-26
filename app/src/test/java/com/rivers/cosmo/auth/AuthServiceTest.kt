@@ -113,6 +113,30 @@ class AuthServiceTest {
     }
 
     @Test
+    fun saysWhenSupabaseIsMissingTheMigration() {
+        val missing = AccountServerException(
+            SupabaseAccountDirectory.describeError(404, """{"code":"PGRST202","message":"Could not find the function public.register_account(p_cosmo_id, p_verifier) in the schema cache"}""")
+        )
+        val server = object : AccountDirectory {
+            override fun register(cosmoId: String, verifier: String): Boolean = throw missing
+            override fun verify(cosmoId: String, verifier: String): AccountDirectory.Verification = throw missing
+        }
+        val result = AuthService(FakeLocal(), server).signUp(id, phrase) as AuthService.Result.Failure
+        assertTrue(result.message, result.message.contains("supabase/migrations"))
+        val login = AuthService(FakeLocal(), server).logIn(id, phrase) as AuthService.Result.Failure
+        assertTrue(login.message, login.message.contains("supabase/migrations"))
+    }
+
+    @Test
+    fun explainsSupabaseErrors() {
+        assertTrue(SupabaseAccountDirectory.describeError(401, """{"message":"Invalid API key"}""").contains("supabase.anonKey"))
+        assertEquals(
+            "Cosmo's account server returned an error (500): boom",
+            SupabaseAccountDirectory.describeError(500, """{"code":"XX000","message":"boom"}""")
+        )
+    }
+
+    @Test
     fun keepsAccountsOnThePhoneWithoutSupabase() {
         val local = FakeLocal()
         val auth = AuthService(local, directory = null)

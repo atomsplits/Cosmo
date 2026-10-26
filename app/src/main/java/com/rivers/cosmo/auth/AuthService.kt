@@ -35,6 +35,8 @@ class AuthService(private val local: LocalAccounts, private val directory: Accou
         }
         val created = try {
             directory.register(userId, PhraseVerifier.derive(userId, phrase))
+        } catch (e: AccountServerException) {
+            return Result.Failure("The account wasn't created. ${e.message}")
         } catch (e: IOException) {
             return Result.Failure("Couldn't reach Cosmo's account server, so the account wasn't created. Check your connection and try again.")
         }
@@ -52,7 +54,7 @@ class AuthService(private val local: LocalAccounts, private val directory: Accou
         } catch (e: IOException) {
             // Offline: accounts already used on this phone still open.
             return if (local.logIn(userId, phrase)) Result.Success(online = false)
-            else Result.Failure("Couldn't reach Cosmo's account server. Check your connection and try again.")
+            else Result.Failure((e as? AccountServerException)?.message ?: "Couldn't reach Cosmo's account server. Check your connection and try again.")
         }
         return when (verification) {
             AccountDirectory.Verification.Ok -> {

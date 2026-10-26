@@ -8,6 +8,12 @@ import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
 
+/**
+ * The account server answered, but with an error, as opposed to not being reachable at all.
+ * [message] says what's wrong in words for the user (usually a setup problem).
+ */
+class AccountServerException(message: String) : IOException(message)
+
 /** Where accounts are registered and checked, so the same account works on any phone. */
 interface AccountDirectory {
     enum class Verification { Ok, Mismatch, Unknown }
@@ -52,8 +58,24 @@ class SupabaseAccountDirectory(private val config: SupabaseConfig) : AccountDire
             .build()
         http.newCall(request).execute().use { response ->
             val text = response.body?.string().orEmpty().trim()
-            if (!response.isSuccessful) throw IOException("Supabase returned ${response.code}")
+            if (!response.isSuccessful) throw AccountServerException(describeError(response.code, text))
             return text
+        }
+    }
+
+    companion object {
+        /** Explains a Supabase (PostgREST) error response, e.g. {"code":"PGRST202","message":"Could not find the function …"}. */
+        fun describeError(status: Int, body: String): String {
+            val json = runCatching { JSONObject(body) }.getOrNull()
+            val code = json?.optString("code").orEmpty()
+            val message = json?.optString("message")?.takeIf { it.isNotBlank() } ?: body.take(200)
+            return when {
+                code == "PGRST202" || status == 404 ->
+                    "Cosmo's account functions aren't in Supabase yet. Apply the migrations in supabase/migrations (see supabase/README.md)."
+                status == 401 || status == 403 || "API key" in message ->
+                    "Supabase rejected the app's key. Check supabase.anonKey in local.properties, then rebuild."
+                else -> "Cosmo's account server returned an error ($status): $message"
+            }
         }
     }
 }
