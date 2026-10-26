@@ -16,9 +16,9 @@ can only be decrypted on the recipient's phone (and the sender's, for their own 
 From the repository root, with any JDK 17 or newer (Android Studio's bundled JDK works):
 
 ```sh
-./gradlew -p server run          # listens on port 8080
-PORT=9000 ./gradlew -p server run   # or pick a port
-./gradlew -p server test         # runs the relay tests
+./gradlew :server:run            # listens on port 8080
+PORT=9000 ./gradlew :server:run     # or pick a port
+./gradlew :server:test           # runs the relay tests
 ```
 
 Then point the app at it in **Settings → Cosmo server**:
@@ -35,7 +35,7 @@ Release builds require `wss://`, so deploy the relay behind TLS before shipping.
 
 The server runs on your computer; the app connects to it.
 
-1. Start it: `./gradlew -p server run`. It prints the addresses to use.
+1. Start it: `./gradlew :server:run`. It prints the addresses to use.
 2. In the app, open Settings → Cosmo server, choose one of these, then tap **Save and reconnect**:
    - **Phone on USB** (easiest): with the phone plugged in and USB debugging on, run
      `adb reverse tcp:8080 tcp:8080` on the computer (again after each reconnect), then pick the

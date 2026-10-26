@@ -27,3 +27,8 @@ dependencyResolutionManagement {
 
 rootProject.name = "Cosmo"
 include(":app")
+
+// The chat/marketplace server is its own Gradle build (with its own Kotlin plugin). Including it
+// lets the IDE import it alongside the app, so its Kotlin code is set up without adding Kotlin to
+// the app's build. It still runs on its own: ./gradlew :server:run (or ./gradlew -p server run).
+includeBuild("server")
