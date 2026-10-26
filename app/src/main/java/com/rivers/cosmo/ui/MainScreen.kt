@@ -1,6 +1,10 @@
 package com.rivers.cosmo.ui
 
+import android.Manifest
+import android.os.Build
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.consumeWindowInsets
@@ -13,6 +17,8 @@ import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Storefront
 import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -34,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import com.rivers.cosmo.chat.ChatNotifier
 import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.anchor.AnchorTransfersController
 import com.rivers.cosmo.fonts.CustomFontStore
@@ -108,6 +115,12 @@ fun MainScreen(
     layoutStore: DashboardLayoutStore,
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
+    notifier: ChatNotifier,
+    /** A conversation to open, from a chat notification. */
+    incomingChat: String?,
+    onChatHandled: () -> Unit,
+    /** Whether the app is on screen (not in the background). */
+    onScreen: Boolean,
     onLogOut: () -> Unit
 ) {
     var tab by rememberSaveable { mutableStateOf(MainTab.Wallet) }
@@ -177,6 +190,37 @@ fun MainScreen(
         }
     }
 
+    LaunchedEffect(incomingChat) {
+        incomingChat ?: return@LaunchedEffect
+        tab = MainTab.Chat
+        creatingPayment = false
+        openContactId = incomingChat
+        onChatHandled()
+    }
+
+    // The conversation on screen is marked read, and its new messages don't notify.
+    val viewing = if (onScreen && tab == MainTab.Chat) openContactId else null
+    LaunchedEffect(viewing) {
+        chatService.setViewing(viewing)
+        viewing?.let(notifier::cancel)
+    }
+
+    // Android 13+ asks before an app may notify; ask while chat notifications are on.
+    var notificationsPermitted by remember { mutableStateOf(notifier.permitted()) }
+    val notificationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
+        notificationsPermitted = notifier.permitted()
+    }
+    LaunchedEffect(settings.chatNotifications) {
+        if (settings.chatNotifications && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notifier.permitted()) {
+            notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+    // Notifications may have been allowed in Android's settings while the app was in the background.
+    LaunchedEffect(onScreen) {
+        if (onScreen) notificationsPermitted = notifier.permitted()
+    }
+    val unreadChats = chatState.conversations.values.sumOf { it.unread }
+
     LaunchedEffect(incomingInvite) {
         incomingInvite ?: return@LaunchedEffect
         tab = MainTab.Payments
@@ -241,7 +285,16 @@ fun MainScreen(
                             tab = item
                             sendError = null
                         },
-                        icon = { Icon(item.icon, contentDescription = null) },
+                        icon = {
+                            val unread = if (item == MainTab.Chat) unreadChats else 0
+                            if (unread > 0) {
+                                BadgedBox(badge = { Badge { Text(if (unread > 99) "99+" else "$unread") } }) {
+                                    Icon(item.icon, contentDescription = "$unread unread")
+                                }
+                            } else {
+                                Icon(item.icon, contentDescription = null)
+                            }
+                        },
                         label = { Text(item.label) }
                     )
                 }
@@ -419,6 +472,7 @@ fun MainScreen(
                     layoutStore = layoutStore,
                     modifier = modifier,
                     identityVerification = kycSection,
+                    notificationsPermitted = notificationsPermitted,
                     fonts = {
                         FontSection(
                             settings = settings,

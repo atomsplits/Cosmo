@@ -4,6 +4,8 @@
 
     <!-- Needed to connect to the chat server. -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Notifications for new chat messages (asked for at runtime on Android 13 and later). -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="true"

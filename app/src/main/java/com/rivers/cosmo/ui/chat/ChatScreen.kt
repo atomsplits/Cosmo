@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.Badge
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.MaterialTheme
@@ -21,6 +22,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -132,15 +134,24 @@ private fun Conversations(state: ChatService.State, onOpenConversation: (cosmoId
                         .fillMaxWidth()
                         .clickable { onOpenConversation(conversation.contactId) }
                 ) {
-                    Column(Modifier.padding(16.dp)) {
-                        Text(conversation.contactId, fontFamily = FontFamily.Monospace)
-                        Text(
-                            conversation.messages.lastOrNull()?.text ?: "No messages yet",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                    Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                conversation.contactId,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = if (conversation.unread > 0) FontWeight.Bold else null
+                            )
+                            Text(
+                                conversation.messages.lastOrNull()?.text ?: "No messages yet",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = if (conversation.unread > 0) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        if (conversation.unread > 0) {
+                            Badge(Modifier.padding(start = 12.dp)) { Text("${conversation.unread}") }
+                        }
                     }
                 }
             }

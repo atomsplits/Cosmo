@@ -154,7 +154,11 @@ data class AppSettings(
      * log in). Off protects the phrase from screen-capturing apps; [SettingsStore] turns it on by
      * default only in debug builds, for recording demos and bug reports.
      */
-    val allowScreenCapture: Boolean = false
+    val allowScreenCapture: Boolean = false,
+    /** Notify about new chat messages while the app is running. */
+    val chatNotifications: Boolean = true,
+    /** Show the message text in chat notifications, not just who it's from. */
+    val notificationPreviews: Boolean = true
 )
 
 /** The Android emulator's address for the computer running it, where server/ runs by default. */
@@ -206,6 +210,8 @@ class SettingsStore(context: Context) {
                 )
             },
             allowScreenCapture = prefs.getBoolean(KEY_ALLOW_SCREEN_CAPTURE, debugBuild),
+            chatNotifications = prefs.getBoolean(KEY_CHAT_NOTIFICATIONS, true),
+            notificationPreviews = prefs.getBoolean(KEY_NOTIFICATION_PREVIEWS, true),
             anchors = AnchorSettings(
                 testnet = prefs.getString(KEY_ANCHORS_TESTNET, null)?.let(::domainList) ?: AnchorSettings.DEFAULT_TESTNET,
                 public = prefs.getString(KEY_ANCHORS_PUBLIC, null)?.let(::domainList) ?: emptyList()
@@ -236,6 +242,8 @@ class SettingsStore(context: Context) {
             .putString(KEY_MOTION_ENTRANCE, settings.motion.entrance.name)
             .putString(KEY_MOTION_SPEED, settings.motion.speed.name)
             .putBoolean(KEY_ALLOW_SCREEN_CAPTURE, settings.allowScreenCapture)
+            .putBoolean(KEY_CHAT_NOTIFICATIONS, settings.chatNotifications)
+            .putBoolean(KEY_NOTIFICATION_PREVIEWS, settings.notificationPreviews)
             .putString(KEY_ANCHORS_TESTNET, settings.anchors.testnet.joinToString("\n"))
             .putString(KEY_ANCHORS_PUBLIC, settings.anchors.public.joinToString("\n"))
             .apply()
@@ -244,6 +252,8 @@ class SettingsStore(context: Context) {
     private companion object {
         const val PREFS_NAME = "cosmo_settings"
         const val KEY_ALLOW_SCREEN_CAPTURE = "allow_screen_capture"
+        const val KEY_CHAT_NOTIFICATIONS = "chat_notifications"
+        const val KEY_NOTIFICATION_PREVIEWS = "notification_previews"
         const val KEY_ANCHORS_TESTNET = "anchors_testnet"
         const val KEY_ANCHORS_PUBLIC = "anchors_public"
         const val KEY_THEME = "theme_mode"

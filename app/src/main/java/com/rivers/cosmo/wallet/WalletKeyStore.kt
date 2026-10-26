@@ -22,6 +22,9 @@ class WalletKeyStore(context: Context) {
     fun keyPair(cosmoId: String): KeyPair? =
         store.read(fileName(cosmoId))?.let { StellarKeys.fromPhrase(it.toString(Charsets.UTF_8).split(" ")) }
 
+    /** The saved recovery phrase, or null if it isn't on this device. Only for deriving values from it (never shown or sent). */
+    fun phrase(cosmoId: String): List<String>? = store.read(fileName(cosmoId))?.toString(Charsets.UTF_8)?.split(" ")
+
     private fun fileName(cosmoId: String) = "$cosmoId.phrase"
 
     private companion object {

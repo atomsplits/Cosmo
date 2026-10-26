@@ -21,6 +21,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,7 +35,11 @@ import com.rivers.cosmo.auth.AuthService
 import com.rivers.cosmo.auth.SupabaseAccountDirectory
 import com.rivers.cosmo.auth.SupabaseConfig
 import com.rivers.cosmo.auth.SeedPhrase
+import com.rivers.cosmo.auth.PhraseVerifier
+import com.rivers.cosmo.chat.ChatKeyServer
+import com.rivers.cosmo.chat.ChatNotifier
 import com.rivers.cosmo.chat.ChatService
+import com.rivers.cosmo.chat.SupabaseKeyDirectory
 import com.rivers.cosmo.anchor.AnchorTransfersController
 import com.rivers.cosmo.fonts.CustomFontStore
 import com.rivers.cosmo.kyc.KycController
@@ -65,6 +71,12 @@ class Main : ComponentActivity() {
     /** A bill split invite link the app was opened with, waiting to be shown. */
     private val incomingInvite = MutableStateFlow<String?>(null)
 
+    /** The conversation a chat notification asked to open, waiting to be shown. */
+    private val incomingChat = MutableStateFlow<String?>(null)
+
+    /** Whether the app is on screen; chat doesn't notify about the conversation being looked at. */
+    private val resumed = MutableStateFlow(false)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         if (savedInstanceState == null) receive(intent)
@@ -73,6 +85,8 @@ class Main : ComponentActivity() {
         // Accounts live in Supabase when it's set up (see app/build.gradle.kts), otherwise on this device only.
         val supabase = SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
         val auth = AuthService(accountStore, supabase.takeIf { it.configured }?.let(::SupabaseAccountDirectory))
+        // Chat keys are published there too, so contacts can be found while they're offline.
+        val chatKeys = supabase.takeIf { it.configured }?.let(::SupabaseKeyDirectory)
         val settingsStore = SettingsStore(applicationContext)
         val fontStore = CustomFontStore(applicationContext)
         val seedPhrase = SeedPhrase(assets.open(SeedPhrase.WORD_LIST_ASSET).bufferedReader().use { it.readLines() })
@@ -95,6 +109,8 @@ class Main : ComponentActivity() {
             }
             CosmoTheme(darkTheme = darkTheme, fontFamily = customFamily ?: settings.font.fontFamily, palette = palette) {
                 val invite by incomingInvite.collectAsState()
+                val chat by incomingChat.collectAsState()
+                val onScreen by resumed.collectAsState()
                 // The background is drawn once behind everything; screens are transparent over it.
                 // With no opaque surface underneath, text would fall back to Compose's default black,
                 // so give everything the theme's text color.
@@ -116,7 +132,11 @@ class Main : ComponentActivity() {
                                 settingsStore.save(it)
                             },
                             incomingInvite = invite,
-                            onInviteHandled = { incomingInvite.value = null }
+                            onInviteHandled = { incomingInvite.value = null },
+                            chatKeys = chatKeys,
+                            incomingChat = chat,
+                            onChatHandled = { incomingChat.value = null },
+                            onScreen = onScreen
                         )
                     }
                 }
@@ -130,7 +150,21 @@ class Main : ComponentActivity() {
         receive(intent)
     }
 
+    override fun onResume() {
+        super.onResume()
+        resumed.value = true
+    }
+
+    override fun onPause() {
+        resumed.value = false
+        super.onPause()
+    }
+
     private fun receive(intent: Intent?) {
+        if (intent?.action == ChatNotifier.ACTION_OPEN_CHAT) {
+            incomingChat.value = intent.getStringExtra(ChatNotifier.EXTRA_CONTACT_ID)
+            return
+        }
         val link = intent?.takeIf { it.action == Intent.ACTION_VIEW }?.dataString ?: return
         if (link.startsWith("${SplitInvite.SCHEME}://${SplitInvite.HOST}")) incomingInvite.value = link
     }
@@ -147,7 +181,12 @@ fun CosmoApp(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
     incomingInvite: String? = null,
-    onInviteHandled: () -> Unit = {}
+    onInviteHandled: () -> Unit = {},
+    chatKeys: ChatKeyServer? = null,
+    /** A conversation to open, from a chat notification. */
+    incomingChat: String? = null,
+    onChatHandled: () -> Unit = {},
+    onScreen: Boolean = true
 ) {
     var userId by rememberSaveable { mutableStateOf(accountStore.currentUserId) }
     var screen by rememberSaveable { mutableStateOf(AuthScreen.Welcome) }
@@ -156,6 +195,7 @@ fun CosmoApp(
     val isDebuggable = (context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE) != 0
 
     val walletKeys = remember { WalletKeyStore(context.applicationContext) }
+    val notifier = remember { ChatNotifier(context.applicationContext) }
 
     val signedInUserId = userId
     if (signedInUserId != null) {
@@ -169,11 +209,22 @@ fun CosmoApp(
         }
         // One chat connection per signed-in user; it restarts if the chat server setting changes.
         val chatService = remember(signedInUserId, settings.chatServerUrl) {
-            ChatService(context.applicationContext, signedInUserId, settings.chatServerUrl)
+            ChatService(context.applicationContext, signedInUserId, settings.chatServerUrl, chatKeys) {
+                walletKeys.phrase(signedInUserId)?.let { PhraseVerifier.derive(signedInUserId, it) }
+            }
         }
         DisposableEffect(chatService) {
             chatService.start()
             onDispose { closeQuietly("chat") { chatService.close() } }
+        }
+        val currentSettings by rememberUpdatedState(settings)
+        LaunchedEffect(chatService) {
+            chatService.newMessages.collect { message ->
+                if (currentSettings.chatNotifications) {
+                    val unread = chatService.state.value.conversations[message.from]?.unread ?: 1
+                    notifier.show(message, unread, currentSettings.notificationPreviews)
+                }
+            }
         }
         // Verification and cash-outs go through the anchors chosen in Settings, signed in with this wallet.
         val anchorDomains = settings.anchors.forNetwork(settings.stellarNetwork)
@@ -215,7 +266,12 @@ fun CosmoApp(
             market = market,
             settings = settings,
             onSettingsChange = onSettingsChange,
+            notifier = notifier,
+            incomingChat = incomingChat,
+            onChatHandled = onChatHandled,
+            onScreen = onScreen,
             onLogOut = {
+                notifier.cancelAll()
                 accountStore.logOut()
                 userId = null
                 screen = AuthScreen.Welcome
