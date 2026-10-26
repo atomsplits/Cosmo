@@ -4,7 +4,6 @@ import android.net.Uri
 import android.provider.OpenableColumns
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -18,8 +17,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -45,10 +42,11 @@ import com.rivers.cosmo.market.MarketProtocol
 import com.rivers.cosmo.market.MarketplaceController
 import com.rivers.cosmo.market.Order
 import com.rivers.cosmo.ui.components.AmountField
-import com.rivers.cosmo.ui.components.FormColumn
-import com.rivers.cosmo.ui.motion.LocalMotion
+import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
+import com.rivers.cosmo.ui.dashboard.DashboardModule
+import com.rivers.cosmo.ui.dashboard.ModularPage
+import com.rivers.cosmo.ui.dashboard.WidgetCard
 import com.rivers.cosmo.ui.motion.entrance
-import com.rivers.cosmo.ui.motion.screenTransition
 import com.rivers.cosmo.wallet.Escrow
 import com.rivers.cosmo.wallet.StellarNetwork
 import com.rivers.cosmo.wallet.formatAmount
@@ -60,22 +58,19 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-private enum class MarketTab(val label: String) { Browse("Browse"), Selling("Selling"), Orders("Orders") }
-
 private const val REFRESH_MS = 10_000L
 
-/** Buy and sell digital goods for XLM, paid through an escrow on Stellar. */
+/** Buy and sell digital goods for XLM, paid through an escrow on Stellar. Browse, Sell and Orders are widgets the user can arrange. */
 @Composable
 fun MarketplaceScreen(
     market: MarketplaceController,
     userId: String,
     network: StellarNetwork,
+    layoutStore: DashboardLayoutStore,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val state by market.state.collectAsState()
-    var tab by rememberSaveable { mutableStateOf(MarketTab.Browse) }
-    val motion = LocalMotion.current
 
     LaunchedEffect(market) {
         market.browse()
@@ -85,21 +80,12 @@ fun MarketplaceScreen(
         }
     }
 
-    Column(modifier) {
-        TabRow(selectedTabIndex = tab.ordinal) {
-            MarketTab.entries.forEach { option ->
-                Tab(selected = option == tab, onClick = { tab = option }, text = { Text(option.label) })
-            }
-        }
-        AnimatedContent(targetState = tab, transitionSpec = { screenTransition(motion) }, label = "market tab", modifier = Modifier.weight(1f)) { shown ->
-            val content = Modifier.fillMaxWidth()
-            when (shown) {
-                MarketTab.Browse -> BrowseTab(state, userId, network, market, onMessage, onBought = { tab = MarketTab.Orders }, modifier = content)
-                MarketTab.Selling -> SellingTab(state, market, onMessage, modifier = content)
-                MarketTab.Orders -> OrdersTab(state, network, market, onMessage, modifier = content)
-            }
-        }
-    }
+    val modules = listOf(
+        DashboardModule("browse", "Browse") { BrowseTab(state, userId, network, market, onMessage, modifier = Modifier) },
+        DashboardModule("sell", "Sell") { WidgetCard { SellingTab(state, market, onMessage, modifier = Modifier) } },
+        DashboardModule("orders", "Orders") { OrdersTab(state, network, market, onMessage, modifier = Modifier) }
+    )
+    ModularPage(page = "market", title = "Marketplace", modules = modules, layoutStore = layoutStore, modifier = modifier)
 }
 
 @Composable
@@ -109,14 +95,13 @@ private fun BrowseTab(
     network: StellarNetwork,
     market: MarketplaceController,
     onMessage: (String) -> Unit,
-    onBought: () -> Unit,
     modifier: Modifier
 ) {
     val scope = rememberCoroutineScope()
     var buying by remember { mutableStateOf<Listing?>(null) }
-    FormColumn(modifier) {
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("Marketplace", style = MaterialTheme.typography.headlineSmall, modifier = Modifier.weight(1f))
+            Text("For sale", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
             TextButton(onClick = market::browse, enabled = !state.browsing) { Text(if (state.browsing) "Loading…" else "Refresh") }
         }
         state.browseError?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -167,10 +152,7 @@ private fun BrowseTab(
                     buying = null
                     scope.launch {
                         market.buy(listing)
-                            .onSuccess {
-                                onMessage("Asked ${listing.sellerId} for an offer.")
-                                onBought()
-                            }
+                            .onSuccess { onMessage("Asked ${listing.sellerId} for an offer. It'll show up in Orders.") }
                             .onFailure { onMessage(it.message ?: "Couldn't contact the seller.") }
                     }
                 }) { Text("Ask for an offer") }
@@ -206,8 +188,8 @@ private fun SellingTab(state: MarketplaceController.State, market: MarketplaceCo
     val goods = if (kind == Listing.TEXT) text.takeIf { it.isNotBlank() }?.let { Goods(Listing.TEXT, it.toByteArray(Charsets.UTF_8)) } else file
     val ready = title.isNotBlank() && parsedPrice != null && goods != null && !saving
 
-    FormColumn(modifier) {
-        Text("Sell something", style = MaterialTheme.typography.headlineSmall)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Sell something", style = MaterialTheme.typography.titleMedium)
         OutlinedTextField(
             value = title, onValueChange = { title = it.take(80) }, label = { Text("Title") }, singleLine = true,
             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences), modifier = Modifier.fillMaxWidth()
@@ -300,8 +282,8 @@ private fun OrdersTab(
     }
     val now = System.currentTimeMillis() / 1000
 
-    FormColumn(modifier) {
-        Text("Orders", style = MaterialTheme.typography.headlineSmall)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Orders", style = MaterialTheme.typography.titleMedium)
         if (state.orders.isEmpty()) Text("Things you buy and sell show up here.")
         state.orders.forEachIndexed { i, order ->
             val busy = order.id in state.busy

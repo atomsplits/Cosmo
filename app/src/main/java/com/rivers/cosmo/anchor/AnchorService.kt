@@ -35,11 +35,16 @@ class AnchorService(private val network: StellarNetwork, private val signer: () 
     // SEP-24
 
     /** What the anchor pays out, limited to XLM and tokens its stellar.toml says it issues, so the right one gets paid. */
-    fun withdrawAssets(domain: String): List<Sep24.WithdrawAsset> {
+    fun withdrawAssets(domain: String): List<Sep24.TransferAsset> = transferAssets(domain, "withdraw")
+
+    /** What the anchor sells (deposits), with the same issuer check as [withdrawAssets]. */
+    fun depositAssets(domain: String): List<Sep24.TransferAsset> = transferAssets(domain, "deposit")
+
+    private fun transferAssets(domain: String, section: String): List<Sep24.TransferAsset> {
         val server = sep24Server(domain)
         val currencies = toml(domain).currencies
-        return Sep24.parseInfo(http.getJson("$server/info")).mapNotNull { asset ->
-            if (asset.code == "native") return@mapNotNull asset
+        return Sep24.parseInfo(http.getJson("$server/info"), section).mapNotNull { asset ->
+            if (asset.isXlm) return@mapNotNull asset
             val issuer = currencies.firstOrNull { it.code == asset.code && it.issuer != null }?.issuer ?: return@mapNotNull null
             asset.copy(issuer = issuer)
         }
@@ -56,7 +61,20 @@ class AnchorService(private val network: StellarNetwork, private val signer: () 
         return Sep24.parseStarted(http.postJson("$server/transactions/withdraw/interactive", payload, token(domain)))
     }
 
-    fun withdrawal(domain: String, id: String): Sep24.Transaction {
+    /** Starts buying [asset] (paid for on the anchor's page, e.g. by card) and returns its page. */
+    fun startDeposit(domain: String, asset: Sep24.TransferAsset, amount: BigDecimal?): Sep24.Started {
+        val server = sep24Server(domain)
+        val payload = JSONObject()
+            .put("asset_code", asset.code)
+            .put("account", account().accountId)
+            .put("lang", Locale.getDefault().language)
+        asset.issuer?.let { payload.put("asset_issuer", it) }
+        amount?.let { payload.put("amount", it.toPlainString()) }
+        return Sep24.parseStarted(http.postJson("$server/transactions/deposit/interactive", payload, token(domain)))
+    }
+
+    /** A deposit or withdrawal's current status. */
+    fun transaction(domain: String, id: String): Sep24.Transaction {
         val url = "${sep24Server(domain)}/transaction".toHttpUrl().newBuilder().addQueryParameter("id", id).build().toString()
         return Sep24.parseTransaction(http.getJson(url, token(domain)))
     }

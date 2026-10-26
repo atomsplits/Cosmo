@@ -27,19 +27,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
-import com.rivers.cosmo.anchor.CashOutController
+import com.rivers.cosmo.anchor.AnchorTransfersController
 import com.rivers.cosmo.anchor.Sep24
 import com.rivers.cosmo.ui.components.AmountField
-import com.rivers.cosmo.ui.components.FormColumn
 import com.rivers.cosmo.ui.motion.entrance
 import com.rivers.cosmo.wallet.StellarNetwork
 import com.rivers.cosmo.wallet.WalletBalance
 import com.rivers.cosmo.wallet.formatAmount
 import com.rivers.cosmo.wallet.parseAmount
-import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-
-private const val POLL_MS = 5_000L
 
 /**
  * Cash out to a bank account through an anchor (SEP-24): the anchor's page collects the bank
@@ -48,7 +44,7 @@ private const val POLL_MS = 5_000L
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun CashOutScreen(
-    cashOut: CashOutController,
+    cashOut: AnchorTransfersController,
     balances: List<WalletBalance>,
     anchorDomains: List<String>,
     network: StellarNetwork,
@@ -61,31 +57,24 @@ fun CashOutScreen(
     var chosenDomain by rememberSaveable { mutableStateOf<String?>(null) }
     // Falls back to the first anchor if the chosen one was removed in Settings.
     val domain = chosenDomain?.takeIf { it in anchorDomains } ?: anchorDomains.firstOrNull()
-    var assets by remember { mutableStateOf<List<Sep24.WithdrawAsset>?>(null) }
+    var assets by remember { mutableStateOf<List<Sep24.TransferAsset>?>(null) }
     var assetsError by remember { mutableStateOf<String?>(null) }
     var assetCode by rememberSaveable { mutableStateOf<String?>(null) }
     var amount by rememberSaveable { mutableStateOf("") }
     var starting by remember { mutableStateOf(false) }
-    var paying by remember { mutableStateOf<CashOutController.CashOut?>(null) }
+    var paying by remember { mutableStateOf<AnchorTransfersController.Transfer?>(null) }
 
     LaunchedEffect(domain) {
         assets = null
         assetsError = null
         val selected = domain ?: return@LaunchedEffect
-        cashOut.assets(selected)
+        cashOut.withdrawAssets(selected)
             .onSuccess { assets = it }
             .onFailure { assetsError = it.message }
     }
-    // Follows cash-outs while this screen is open, e.g. after the user comes back from the anchor's page.
-    LaunchedEffect(cashOut) {
-        while (true) {
-            cashOut.refresh()
-            delay(POLL_MS)
-        }
-    }
 
     val asset = assets?.firstOrNull { it.code == assetCode } ?: assets?.firstOrNull()
-    val balance = asset?.let { a -> balances.firstOrNull { if (a.code == "native") it.isNative else it.code == a.code && it.issuer == a.issuer } }
+    val balance = asset?.let { a -> balances.firstOrNull { if (a.isXlm) it.isNative else it.code == a.code && it.issuer == a.issuer } }
     val parsedAmount = parseAmount(amount)
     val amountProblem = when {
         parsedAmount == null || balance == null -> null
@@ -95,8 +84,8 @@ fun CashOutScreen(
         else -> null
     }
 
-    FormColumn(modifier) {
-        Text("Cash out to your bank", style = MaterialTheme.typography.headlineSmall)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Cash out to your bank", style = MaterialTheme.typography.titleMedium)
         if (anchorDomains.isEmpty()) {
             Text("Add an anchor in Settings → Anchors to cash out through it.")
         } else {
@@ -114,7 +103,7 @@ fun CashOutScreen(
                 else -> {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         assets.orEmpty().forEach { option ->
-                            val label = if (option.code == "native") "XLM" else option.code
+                            val label = if (option.isXlm) "XLM" else option.code
                             FilterChip(selected = option == asset, onClick = { assetCode = option.code }, label = { Text(label) })
                         }
                     }
@@ -134,7 +123,7 @@ fun CashOutScreen(
                                 val selected = domain ?: return@Button
                                 starting = true
                                 scope.launch {
-                                    cashOut.start(selected, balance, parsedAmount)
+                                    cashOut.startWithdrawal(selected, balance, parsedAmount)
                                         .onSuccess { url -> uriHandler.openUri(url) }
                                         .onFailure { onMessage(it.message ?: "Couldn't start the cash-out.") }
                                     starting = false
@@ -203,7 +192,7 @@ fun CashOutScreen(
 
 @Composable
 private fun CashOutCard(
-    item: CashOutController.CashOut,
+    item: AnchorTransfersController.Transfer,
     paying: Boolean,
     onOpen: (String) -> Unit,
     onPay: () -> Unit,

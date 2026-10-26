@@ -28,9 +28,12 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.auth.UserIdGenerator
 import com.rivers.cosmo.chat.ChatService
-import com.rivers.cosmo.ui.components.FormColumn
+import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
+import com.rivers.cosmo.ui.dashboard.DashboardModule
+import com.rivers.cosmo.ui.dashboard.ModularPage
 import com.rivers.cosmo.ui.motion.entrance
 
+/** The Chat page: connection status, the user's identity, starting a chat and conversations, as widgets. */
 @Composable
 fun ChatScreen(
     userId: String,
@@ -39,36 +42,49 @@ fun ChatScreen(
     onStartChat: (cosmoId: String) -> Unit,
     onOpenConversation: (cosmoId: String) -> Unit,
     onReconnect: () -> Unit,
+    layoutStore: DashboardLayoutStore,
     modifier: Modifier = Modifier
 ) {
+    val modules = listOf(
+        DashboardModule("status", "Connection") { ConnectionStatus(state, onReconnect) },
+        DashboardModule("identity", "Your Cosmo ID") { IdentityCard(userId, state) },
+        DashboardModule("start", "Start a chat") { StartChat(state, opening, onStartChat) },
+        DashboardModule("conversations", "Conversations", isEmpty = state.conversations.isEmpty(), emptyHint = "Your conversations appear here") {
+            Conversations(state, onOpenConversation)
+        }
+    )
+    ModularPage(page = "chat", title = "Chat", modules = modules, layoutStore = layoutStore, modifier = modifier)
+}
+
+@Composable
+private fun IdentityCard(userId: String, state: ChatService.State) {
+    Card(modifier = Modifier.fillMaxWidth()) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text("Your Cosmo ID", style = MaterialTheme.typography.labelLarge)
+            Text(userId, fontFamily = FontFamily.Monospace)
+            Text("Your key fingerprint", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
+            Text(
+                state.ownFingerprint ?: "Generating your key…",
+                style = MaterialTheme.typography.bodySmall,
+                fontFamily = FontFamily.Monospace
+            )
+            Text(
+                "Messages are end-to-end encrypted with PGP. Your private key never leaves this phone.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun StartChat(state: ChatService.State, opening: Boolean, onStartChat: (cosmoId: String) -> Unit) {
     var cosmoId by rememberSaveable { mutableStateOf("") }
     val normalized = UserIdGenerator.normalize(cosmoId)
     val invalid = cosmoId.isNotBlank() && !UserIdGenerator.isValid(normalized)
     val online = state.connection == ChatService.Connection.Online
-
-    FormColumn(modifier) {
-        Text("Chat", style = MaterialTheme.typography.headlineMedium)
-        ConnectionStatus(state, onReconnect)
-
-        Card(modifier = Modifier.fillMaxWidth()) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                Text("Your Cosmo ID", style = MaterialTheme.typography.labelLarge)
-                Text(userId, fontFamily = FontFamily.Monospace)
-                Text("Your key fingerprint", style = MaterialTheme.typography.labelLarge, modifier = Modifier.padding(top = 8.dp))
-                Text(
-                    state.ownFingerprint ?: "Generating your key…",
-                    style = MaterialTheme.typography.bodySmall,
-                    fontFamily = FontFamily.Monospace
-                )
-                Text(
-                    "Messages are end-to-end encrypted with PGP. Your private key never leaves this phone.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(top = 8.dp)
-                )
-            }
-        }
-
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
             value = cosmoId,
             onValueChange = { cosmoId = it },
@@ -100,31 +116,34 @@ fun ChatScreen(
         ) {
             Text(if (opening) "Looking up their key…" else "Start chat")
         }
+    }
+}
 
-        if (state.conversations.isNotEmpty()) {
-            Text("Conversations", style = MaterialTheme.typography.titleMedium)
-            state.conversations.values
-                .sortedByDescending { conversation -> conversation.messages.lastOrNull()?.sentAt ?: 0L }
-                .forEachIndexed { i, conversation ->
-                    Card(
-                        modifier = Modifier
-                            .entrance(i)
-                            .fillMaxWidth()
-                            .clickable { onOpenConversation(conversation.contactId) }
-                    ) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(conversation.contactId, fontFamily = FontFamily.Monospace)
-                            Text(
-                                conversation.messages.lastOrNull()?.text ?: "No messages yet",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
-                            )
-                        }
+@Composable
+private fun Conversations(state: ChatService.State, onOpenConversation: (cosmoId: String) -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Text("Conversations", style = MaterialTheme.typography.titleMedium)
+        state.conversations.values
+            .sortedByDescending { conversation -> conversation.messages.lastOrNull()?.sentAt ?: 0L }
+            .forEachIndexed { i, conversation ->
+                Card(
+                    modifier = Modifier
+                        .entrance(i)
+                        .fillMaxWidth()
+                        .clickable { onOpenConversation(conversation.contactId) }
+                ) {
+                    Column(Modifier.padding(16.dp)) {
+                        Text(conversation.contactId, fontFamily = FontFamily.Monospace)
+                        Text(
+                            conversation.messages.lastOrNull()?.text ?: "No messages yet",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                     }
                 }
-        }
+            }
     }
 }
 

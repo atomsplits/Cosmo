@@ -3,10 +3,17 @@ package com.rivers.cosmo.anchor
 import java.math.BigDecimal
 import org.json.JSONObject
 
-/** SEP-24, hosted withdrawals: the anchor's web page collects bank details and KYC, then Cosmo pays it. */
+/**
+ * SEP-24, hosted deposits and withdrawals. Withdrawals: the anchor's page collects bank details,
+ * then Cosmo pays it. Deposits (buying crypto): the anchor's page takes the card payment, then the
+ * anchor sends the crypto. Either way, bank and card details never pass through Cosmo.
+ */
 object Sep24 {
-    /** What the anchor lets users withdraw, by asset code ("native" is XLM); [issuer] comes from its stellar.toml. */
-    data class WithdrawAsset(val code: String, val minAmount: BigDecimal?, val maxAmount: BigDecimal?, val issuer: String? = null)
+    /** What the anchor lets users deposit or withdraw, by asset code ("native" is XLM); [issuer] comes from its stellar.toml. */
+    data class TransferAsset(val code: String, val minAmount: BigDecimal?, val maxAmount: BigDecimal?, val issuer: String? = null) {
+        /** Older anchors call XLM "XLM" instead of "native". */
+        val isXlm: Boolean get() = code == "native" || (code == "XLM" && issuer == null)
+    }
 
     /** The anchor's page to open for this withdrawal. */
     data class Started(val id: String, val url: String)
@@ -30,12 +37,13 @@ object Sep24 {
 
     private val FINISHED = setOf("completed", "refunded", "expired", "error", "no_market", "too_small", "too_large")
 
-    fun parseInfo(json: JSONObject): List<WithdrawAsset> {
-        val withdraw = json.optJSONObject("withdraw") ?: return emptyList()
-        return withdraw.keys().asSequence().mapNotNull { code ->
-            val asset = withdraw.optJSONObject(code) ?: return@mapNotNull null
+    /** The enabled assets in the /info response's "withdraw" or "deposit" section. */
+    fun parseInfo(json: JSONObject, section: String = "withdraw"): List<TransferAsset> {
+        val assets = json.optJSONObject(section) ?: return emptyList()
+        return assets.keys().asSequence().mapNotNull { code ->
+            val asset = assets.optJSONObject(code) ?: return@mapNotNull null
             if (!asset.optBoolean("enabled", false)) return@mapNotNull null
-            WithdrawAsset(code, asset.decimal("min_amount"), asset.decimal("max_amount"))
+            TransferAsset(code, asset.decimal("min_amount"), asset.decimal("max_amount"))
         }.sortedBy { it.code }.toList()
     }
 
@@ -65,13 +73,13 @@ object Sep24 {
     }
 
     /** Plain words for SEP-24's transaction statuses. */
-    fun statusLabel(status: String): String = when (status) {
+    fun statusLabel(status: String, deposit: Boolean = false): String = when (status) {
         "incomplete" -> "Waiting for you to finish on the anchor's page"
-        "pending_user_transfer_start" -> "Ready: send the funds to finish"
-        "pending_user_transfer_complete" -> "Funds received by the anchor"
+        "pending_user_transfer_start" -> if (deposit) "Waiting for your card payment" else "Ready: send the funds to finish"
+        "pending_user_transfer_complete" -> if (deposit) "Payment received" else "Funds received by the anchor"
         "pending_anchor" -> "The anchor is processing it"
         "pending_stellar" -> "Waiting for the Stellar network"
-        "pending_external" -> "On its way to your bank"
+        "pending_external" -> if (deposit) "Waiting for your card payment to clear" else "On its way to your bank"
         "pending_trust" -> "Waiting for a trustline"
         "pending_user" -> "The anchor needs something from you"
         "completed" -> "Completed"

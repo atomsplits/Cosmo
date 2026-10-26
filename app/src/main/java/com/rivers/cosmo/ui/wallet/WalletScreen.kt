@@ -19,7 +19,6 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -31,11 +30,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.settings.BannerSettings
 import com.rivers.cosmo.settings.BannerStyle
-import com.rivers.cosmo.ui.dashboard.Dashboard
-import com.rivers.cosmo.ui.dashboard.DashboardLayout
 import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
 import com.rivers.cosmo.ui.dashboard.DashboardModule
-import com.rivers.cosmo.ui.dashboard.DashboardToolbar
+import com.rivers.cosmo.ui.dashboard.ModularPage
 import com.rivers.cosmo.ui.payments.PaymentRow
 import com.rivers.cosmo.wallet.AccountState
 import com.rivers.cosmo.wallet.StellarClient
@@ -54,33 +51,18 @@ fun WalletDashboard(
     network: StellarNetwork,
     modifier: Modifier = Modifier
 ) {
-    var layout by remember { mutableStateOf(layoutStore.load()) }
-    var editing by rememberSaveable { mutableStateOf(false) }
-    fun update(newLayout: DashboardLayout) {
-        layout = newLayout
-        layoutStore.save(newLayout)
-    }
-    Column(modifier) {
-        if (banner.style != BannerStyle.Off) {
-            WalletBanner(banner, network, layout, editing, onMove = { id, position -> update(layout.moveBannerItem(id, position)) })
+    ModularPage(
+        page = DashboardLayoutStore.WALLET,
+        title = null,
+        modules = modules,
+        layoutStore = layoutStore,
+        modifier = modifier,
+        header = { layout, editing, update ->
+            if (banner.style != BannerStyle.Off) {
+                WalletBanner(banner, network, layout, editing, onMove = { id, position -> update(layout.moveBannerItem(id, position)) })
+            }
         }
-        DashboardToolbar(
-            editing = editing,
-            onEditingChange = { editing = it },
-            hiddenModules = modules.filter { it.id in layout.hidden },
-            onShow = { update(layout.show(it)) },
-            onReset = { update(DashboardLayout()) },
-            snapToGrid = layout.snapToGrid,
-            onSnapToGridChange = { update(layout.copy(snapToGrid = it)) }
-        )
-        Dashboard(
-            modules = modules,
-            layout = layout,
-            onLayoutChange = ::update,
-            editing = editing,
-            modifier = Modifier.weight(1f).padding(horizontal = 16.dp)
-        )
-    }
+    )
 }
 
 /** The built-in wallet modules, in their default top-to-bottom order. */
@@ -91,6 +73,8 @@ fun walletModules(
     onAddressCopied: () -> Unit,
     /** Identity verification with the user's anchor (SEP-12). */
     kycSection: @Composable () -> Unit,
+    /** Buying XLM by card, locked until the anchor has verified the user. */
+    buyXlm: @Composable () -> Unit,
     onLogOut: () -> Unit
 ): List<DashboardModule> = listOf(
     DashboardModule("network", "Network") { NetworkBadge(state.network) },
@@ -116,6 +100,9 @@ fun walletModules(
     DashboardModule("refresh", "Refresh", isEmpty = state.keyMissing) { RefreshModule(state, onRefresh) },
     DashboardModule("activity", "Recent activity", isEmpty = state.keyMissing) { ActivityModule(state) },
     DashboardModule("kyc", "Identity verification") { kycSection() },
+    DashboardModule("buy", "Buy XLM") {
+        Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) { buyXlm() } }
+    },
     DashboardModule("logout", "Log out") {
         OutlinedButton(onClick = onLogOut, modifier = Modifier.fillMaxWidth()) { Text("Log out") }
     }

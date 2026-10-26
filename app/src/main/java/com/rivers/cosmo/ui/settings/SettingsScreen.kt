@@ -48,7 +48,9 @@ import com.rivers.cosmo.settings.DEFAULT_CHAT_SERVER_URL
 import com.rivers.cosmo.settings.ThemeMode
 import com.rivers.cosmo.ui.components.ColorPickerDialog
 import com.rivers.cosmo.ui.components.ColorSwatch
-import com.rivers.cosmo.ui.components.FormColumn
+import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
+import com.rivers.cosmo.ui.dashboard.DashboardModule
+import com.rivers.cosmo.ui.dashboard.ModularPage
 import com.rivers.cosmo.ui.theme.Palette
 import com.rivers.cosmo.ui.theme.previewPalette
 import com.rivers.cosmo.wallet.StellarNetwork
@@ -57,6 +59,7 @@ import com.rivers.cosmo.wallet.StellarNetwork
 fun SettingsScreen(
     settings: AppSettings,
     onSettingsChange: (AppSettings) -> Unit,
+    layoutStore: DashboardLayoutStore,
     modifier: Modifier = Modifier,
     identityVerification: @Composable () -> Unit = {},
     plugins: @Composable () -> Unit = {},
@@ -65,60 +68,56 @@ fun SettingsScreen(
     /** Share and import buttons for the theme. */
     themeSharing: @Composable () -> Unit = {}
 ) {
-    FormColumn(modifier) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium)
-
-        Text("Identity verification", style = MaterialTheme.typography.titleMedium)
-        identityVerification()
-
-        Text("Plugins", style = MaterialTheme.typography.titleMedium)
-        plugins()
-
-        Text("Theme", style = MaterialTheme.typography.titleMedium)
-        ThemeGrid(
-            selected = settings.themeMode,
-            customColors = settings.customColors,
-            onSelected = { onSettingsChange(settings.copy(themeMode = it)) }
-        )
-        if (settings.themeMode == ThemeMode.Custom) {
-            CustomThemeEditor(
-                colors = settings.customColors,
-                onChange = { onSettingsChange(settings.copy(customColors = it)) }
+    fun section(id: String, title: String, content: @Composable () -> Unit) = DashboardModule(id, title) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            content()
+        }
+    }
+    val modules = listOf(
+        section("kyc", "Identity verification") { identityVerification() },
+        section("plugins", "Plugins") { plugins() },
+        section("theme", "Theme") {
+            ThemeGrid(
+                selected = settings.themeMode,
+                customColors = settings.customColors,
+                onSelected = { onSettingsChange(settings.copy(themeMode = it)) }
+            )
+            if (settings.themeMode == ThemeMode.Custom) {
+                CustomThemeEditor(
+                    colors = settings.customColors,
+                    onChange = { onSettingsChange(settings.copy(customColors = it)) }
+                )
+            }
+            themeSharing()
+        },
+        section("font", "Font") { fonts() },
+        section("banner", "Banner") { BannerSection(banner = settings.banner, onChange = { onSettingsChange(settings.copy(banner = it)) }) },
+        section("background", "Background") {
+            BackgroundSection(background = settings.background, onChange = { onSettingsChange(settings.copy(background = it)) })
+        },
+        section("motion", "Motion") { MotionSection(motion = settings.motion, onChange = { onSettingsChange(settings.copy(motion = it)) }) },
+        section("anchors", "Anchors") {
+            AnchorsSection(
+                network = settings.stellarNetwork,
+                domains = settings.anchors.forNetwork(settings.stellarNetwork),
+                onChange = { onSettingsChange(settings.copy(anchors = settings.anchors.with(settings.stellarNetwork, it))) }
+            )
+        },
+        section("network", "Stellar network") {
+            NetworkSelector(
+                selected = settings.stellarNetwork,
+                onSelected = { onSettingsChange(settings.copy(stellarNetwork = it)) }
+            )
+        },
+        section("server", "Cosmo server") {
+            ChatServerField(
+                url = settings.chatServerUrl,
+                onSave = { onSettingsChange(settings.copy(chatServerUrl = it)) }
             )
         }
-        themeSharing()
-
-        Text("Banner", style = MaterialTheme.typography.titleMedium)
-        BannerSection(banner = settings.banner, onChange = { onSettingsChange(settings.copy(banner = it)) })
-
-        Text("Background", style = MaterialTheme.typography.titleMedium)
-        BackgroundSection(background = settings.background, onChange = { onSettingsChange(settings.copy(background = it)) })
-
-        Text("Motion", style = MaterialTheme.typography.titleMedium)
-        MotionSection(motion = settings.motion, onChange = { onSettingsChange(settings.copy(motion = it)) })
-
-        Text("Anchors", style = MaterialTheme.typography.titleMedium)
-        AnchorsSection(
-            network = settings.stellarNetwork,
-            domains = settings.anchors.forNetwork(settings.stellarNetwork),
-            onChange = { onSettingsChange(settings.copy(anchors = settings.anchors.with(settings.stellarNetwork, it))) }
-        )
-
-        Text("Stellar network", style = MaterialTheme.typography.titleMedium)
-        NetworkSelector(
-            selected = settings.stellarNetwork,
-            onSelected = { onSettingsChange(settings.copy(stellarNetwork = it)) }
-        )
-
-        Text("Cosmo server", style = MaterialTheme.typography.titleMedium)
-        ChatServerField(
-            url = settings.chatServerUrl,
-            onSave = { onSettingsChange(settings.copy(chatServerUrl = it)) }
-        )
-
-        Text("Font", style = MaterialTheme.typography.titleMedium)
-        fonts()
-    }
+    )
+    ModularPage(page = "settings", title = "Settings", modules = modules, layoutStore = layoutStore, modifier = modifier)
 }
 
 private const val THEME_COLUMNS = 3

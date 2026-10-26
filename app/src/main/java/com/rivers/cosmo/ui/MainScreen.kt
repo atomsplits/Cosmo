@@ -35,7 +35,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import com.rivers.cosmo.chat.ChatService
-import com.rivers.cosmo.anchor.CashOutController
+import com.rivers.cosmo.anchor.AnchorTransfersController
 import com.rivers.cosmo.fonts.CustomFontStore
 import com.rivers.cosmo.kyc.KycController
 import com.rivers.cosmo.market.MarketplaceController
@@ -49,6 +49,7 @@ import com.rivers.cosmo.ui.payments.CreatePaymentScreen
 import com.rivers.cosmo.ui.payments.PaymentsScreen
 import com.rivers.cosmo.ui.settings.FontSection
 import com.rivers.cosmo.ui.settings.KycSection
+import com.rivers.cosmo.ui.transfers.BuyXlmSection
 import com.rivers.cosmo.ui.settings.ThemeSharingSection
 import com.rivers.cosmo.ui.theme.LocalCustomFonts
 import com.rivers.cosmo.ui.settings.PluginsSection
@@ -96,7 +97,7 @@ fun MainScreen(
     wallet: WalletController,
     chatService: ChatService,
     kyc: KycController,
-    cashOut: CashOutController,
+    transfers: AnchorTransfersController,
     fontStore: CustomFontStore,
     market: MarketplaceController,
     plugins: PluginHost,
@@ -133,6 +134,19 @@ fun MainScreen(
         scope.launch { snackbarHostState.showSnackbar(message) }
     }
 
+    // Buying XLM by card is locked behind identity verification with the same anchor.
+    val buyXlm: @Composable () -> Unit = {
+        BuyXlmSection(
+            transfers = transfers,
+            kycState = kycState,
+            network = walletState.network,
+            onSelectAnchor = kyc::select,
+            verification = {
+                KycSection(state = kycState, onSelect = kyc::select, onRefresh = kyc::refresh, onSubmit = kyc::submit, onMessage = ::showMessage)
+            },
+            onMessage = ::showMessage
+        )
+    }
     val kycSection: @Composable () -> Unit = {
         KycSection(
             state = kycState,
@@ -248,6 +262,7 @@ fun MainScreen(
                         onFund = wallet::fundWithFriendbot,
                         onAddressCopied = { showMessage("Wallet address copied.") },
                         kycSection = kycSection,
+                        buyXlm = buyXlm,
                         onLogOut = onLogOut
                     ) + pluginModules(pluginState.widgets, onClick = plugins::click),
                     layoutStore = layoutStore,
@@ -284,6 +299,7 @@ fun MainScreen(
                                 paymentPrefill = null
                                 creatingPayment = true
                             },
+                            layoutStore = layoutStore,
                             modifier = modifier,
                             billSplits = {
                                 SplitsSection(
@@ -351,8 +367,10 @@ fun MainScreen(
                 MainTab.Transfers -> TransfersScreen(
                     state = walletState,
                     wallet = wallet,
-                    cashOut = cashOut,
+                    transfers = transfers,
                     anchorDomains = settings.anchors.forNetwork(walletState.network),
+                    layoutStore = layoutStore,
+                    buyXlm = buyXlm,
                     onMessage = ::showMessage,
                     modifier = modifier
                 )
@@ -360,6 +378,7 @@ fun MainScreen(
                     market = market,
                     userId = userId,
                     network = walletState.network,
+                    layoutStore = layoutStore,
                     onMessage = ::showMessage,
                     modifier = modifier
                 )
@@ -389,6 +408,7 @@ fun MainScreen(
                             },
                             onOpenConversation = { openContactId = it },
                             onReconnect = chatService::reconnect,
+                            layoutStore = layoutStore,
                             modifier = modifier
                         )
                     }
@@ -396,6 +416,7 @@ fun MainScreen(
                 MainTab.Settings -> SettingsScreen(
                     settings = settings,
                     onSettingsChange = onSettingsChange,
+                    layoutStore = layoutStore,
                     modifier = modifier,
                     identityVerification = kycSection,
                     fonts = {

@@ -31,7 +31,7 @@ import androidx.compose.ui.platform.LocalContext
 import com.rivers.cosmo.auth.AccountStore
 import com.rivers.cosmo.auth.SeedPhrase
 import com.rivers.cosmo.chat.ChatService
-import com.rivers.cosmo.anchor.CashOutController
+import com.rivers.cosmo.anchor.AnchorTransfersController
 import com.rivers.cosmo.fonts.CustomFontStore
 import com.rivers.cosmo.kyc.KycController
 import com.rivers.cosmo.market.MarketplaceController
@@ -172,7 +172,7 @@ fun CosmoApp(
         DisposableEffect(kyc) {
             onDispose { kyc.close() }
         }
-        val cashOut = remember(wallet) { CashOutController(context.applicationContext, wallet, settings.stellarNetwork) }
+        val transfers = remember(wallet) { AnchorTransfersController(context.applicationContext, wallet, settings.stellarNetwork) }
         // Runs whenever someone's signed in, so a seller's phone can deliver sales without the tab open.
         val market = remember(wallet, chatService) {
             MarketplaceController(context.applicationContext, signedInUserId, chatService, wallet, settings.stellarNetwork)
@@ -201,7 +201,7 @@ fun CosmoApp(
             wallet = wallet,
             chatService = chatService,
             kyc = kyc,
-            cashOut = cashOut,
+            transfers = transfers,
             fontStore = fontStore,
             market = market,
             settings = settings,

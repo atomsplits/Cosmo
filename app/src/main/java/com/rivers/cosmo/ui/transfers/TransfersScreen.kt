@@ -1,68 +1,65 @@
 package com.rivers.cosmo.ui.transfers
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.material3.Tab
-import androidx.compose.material3.TabRow
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
-import com.rivers.cosmo.anchor.CashOutController
-import com.rivers.cosmo.ui.motion.LocalMotion
-import com.rivers.cosmo.ui.motion.screenTransition
+import com.rivers.cosmo.anchor.AnchorTransfersController
+import com.rivers.cosmo.ui.dashboard.DashboardLayoutStore
+import com.rivers.cosmo.ui.dashboard.DashboardModule
+import com.rivers.cosmo.ui.dashboard.ModularPage
+import com.rivers.cosmo.ui.dashboard.WidgetCard
 import com.rivers.cosmo.wallet.WalletController
+import kotlinx.coroutines.delay
 
-private enum class TransferMode(val label: String) { Trade("Trade"), CashOut("Cash out") }
+private const val POLL_MS = 5_000L
 
-/** Converting money: trade between assets on Stellar's exchange, or cash out to a bank through an anchor. (Sending is in Payments.) */
+/**
+ * Money in, out and across: buy XLM with a card, trade on Stellar's exchange, and cash out to a
+ * bank, as widgets the user can arrange. (Sending is in Payments.)
+ */
 @Composable
 fun TransfersScreen(
     state: WalletController.State,
     wallet: WalletController,
-    cashOut: CashOutController,
+    transfers: AnchorTransfersController,
     anchorDomains: List<String>,
+    layoutStore: DashboardLayoutStore,
+    buyXlm: @Composable () -> Unit,
     onMessage: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    var mode by rememberSaveable { mutableStateOf(TransferMode.Trade) }
-    val motion = LocalMotion.current
-    Column(modifier) {
-        TabRow(selectedTabIndex = mode.ordinal) {
-            TransferMode.entries.forEach { option ->
-                Tab(selected = option == mode, onClick = { mode = option }, text = { Text(option.label) })
-            }
+    // Follows purchases and cash-outs while this page is open, e.g. after coming back from an anchor's page.
+    LaunchedEffect(transfers) {
+        while (true) {
+            transfers.refresh()
+            delay(POLL_MS)
         }
-        AnimatedContent(
-            targetState = mode,
-            transitionSpec = { screenTransition(motion) },
-            label = "transfer mode",
-            modifier = Modifier.weight(1f)
-        ) { shown ->
-            val content = Modifier.fillMaxWidth()
-            when (shown) {
-                TransferMode.Trade -> TradeScreen(
+    }
+    val modules = listOf(
+        DashboardModule("buy", "Buy XLM") { WidgetCard { buyXlm() } },
+        DashboardModule("trade", "Trade") {
+            WidgetCard {
+                TradeScreen(
                     balances = state.balances,
                     network = state.network,
                     onFind = { code -> wallet.findAssets(code, anchorDomains) },
                     onQuote = wallet::quote,
                     onSwap = wallet::swap,
-                    onMessage = onMessage,
-                    modifier = content
+                    onMessage = onMessage
                 )
-                TransferMode.CashOut -> CashOutScreen(
-                    cashOut = cashOut,
+            }
+        },
+        DashboardModule("cashout", "Cash out") {
+            WidgetCard {
+                CashOutScreen(
+                    cashOut = transfers,
                     balances = state.balances,
                     anchorDomains = anchorDomains,
                     network = state.network,
-                    onMessage = onMessage,
-                    modifier = content
+                    onMessage = onMessage
                 )
             }
         }
-    }
+    )
+    ModularPage(page = "transfers", title = "Transfers", modules = modules, layoutStore = layoutStore, modifier = modifier)
 }

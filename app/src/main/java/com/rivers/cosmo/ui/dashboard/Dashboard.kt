@@ -78,12 +78,18 @@ class DashboardModule(
     val content: @Composable () -> Unit
 )
 
-/** Saves the dashboard arrangement on this device. */
+/** Saves each page's arrangement on this device. */
 class DashboardLayoutStore(context: Context) {
     private val prefs = context.getSharedPreferences("cosmo_dashboard", Context.MODE_PRIVATE)
-    fun load(): DashboardLayout = DashboardLayout.fromJson(prefs.getString(KEY, null))
-    fun save(layout: DashboardLayout) = prefs.edit().putString(KEY, layout.toJson()).apply()
-    private companion object { const val KEY = "layout" }
+    fun load(page: String = WALLET): DashboardLayout = DashboardLayout.fromJson(prefs.getString(key(page), null))
+    fun save(layout: DashboardLayout, page: String = WALLET) = prefs.edit().putString(key(page), layout.toJson()).apply()
+
+    // The Wallet page keeps the original key, so layouts saved before other pages were movable still load.
+    private fun key(page: String) = if (page == WALLET) "layout" else "layout-$page"
+
+    companion object {
+        const val WALLET = "wallet"
+    }
 }
 
 /**
@@ -364,6 +370,7 @@ private fun Modifier.scaledContent(scale: Float): Modifier = layout { measurable
 /** Edit / Add widget / Reset controls shown above the dashboard. */
 @Composable
 fun DashboardToolbar(
+    title: String? = null,
     editing: Boolean,
     onEditingChange: (Boolean) -> Unit,
     hiddenModules: List<DashboardModule>,
@@ -379,6 +386,14 @@ fun DashboardToolbar(
         verticalAlignment = Alignment.CenterVertically,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp)
     ) {
+        // The page title takes the free space, so it hides first when edit mode adds buttons.
+        Text(
+            title.orEmpty(),
+            style = MaterialTheme.typography.headlineSmall,
+            maxLines = 1,
+            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+            modifier = Modifier.weight(1f).padding(start = 8.dp)
+        )
         if (editing) {
             TextButton(onClick = { adding = true }, enabled = hiddenModules.isNotEmpty()) { Text("Add widget") }
             TextButton(onClick = { confirmingReset = true }) { Text("Reset") }

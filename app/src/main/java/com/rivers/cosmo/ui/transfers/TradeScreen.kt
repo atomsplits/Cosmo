@@ -37,7 +37,6 @@ import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.ui.components.AmountField
 import com.rivers.cosmo.ui.components.AssetSelector
-import com.rivers.cosmo.ui.components.FormColumn
 import com.rivers.cosmo.wallet.POPULAR_TRADE_CODES
 import com.rivers.cosmo.wallet.StellarNetwork
 import com.rivers.cosmo.wallet.SwapQuote
@@ -138,8 +137,8 @@ fun TradeScreen(
         }
     }
 
-    FormColumn(modifier) {
-        Text("Trade", style = MaterialTheme.typography.headlineSmall)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Text("Trade", style = MaterialTheme.typography.titleMedium)
         Text("You pay", style = MaterialTheme.typography.labelLarge)
         if (balances.size > 1) AssetSelector(balances = balances, selected = from, onSelected = { fromKey = TradeAsset.of(it).key })
         Column {
