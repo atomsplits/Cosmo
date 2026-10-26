@@ -101,6 +101,15 @@ android {
     }
 }
 
+// Compile with a full JDK 17, found on the computer or downloaded by Gradle. Without this the
+// build uses whatever Java runs Gradle; IDE-bundled runtimes (like IntelliJ's JBR) can lack
+// jlink, which the Android build needs ("jlink executable … does not exist").
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
 dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.appcompat)
