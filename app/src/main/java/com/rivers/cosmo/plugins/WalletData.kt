@@ -3,6 +3,11 @@ package com.rivers.cosmo.plugins
 import com.rivers.cosmo.kyc.KycStatus
 import com.rivers.cosmo.wallet.AccountState
 import com.rivers.cosmo.wallet.WalletController
+import com.rivers.cosmo.wallet.XlmPrice
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -12,7 +17,7 @@ import org.json.JSONObject
  * Amounts are strings so they keep all 7 decimal places; `value` is the same as a JS number.
  */
 object WalletData {
-    fun json(cosmoId: String, wallet: WalletController.State, kyc: KycStatus?): String {
+    fun json(cosmoId: String, wallet: WalletController.State, kyc: KycStatus?, price: XlmPrice? = null): String {
         val active = wallet.account as? AccountState.Active
         return JSONObject()
             .put("cosmoId", cosmoId)
@@ -45,6 +50,19 @@ object WalletData {
                 }
             })
             .put("kyc", kyc?.name ?: JSONObject.NULL)
+            .put("price", price?.let(::priceJson) ?: JSONObject.NULL)
             .toString()
     }
+
+    private fun priceJson(price: XlmPrice): JSONObject =
+        JSONObject()
+            .put("usd", price.usd)
+            .put("change24h", price.change24h ?: JSONObject.NULL)
+            .put("history", JSONArray(price.history))
+            .put("updatedAt", isoUtc(price.updatedAt))
+            .put("source", "Stellar DEX (XLM/USDC)")
+
+    /** java.time needs Android 8; the app supports 7. */
+    private fun isoUtc(millis: Long): String =
+        SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date(millis))
 }

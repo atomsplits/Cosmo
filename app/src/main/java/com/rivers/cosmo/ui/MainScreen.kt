@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import com.rivers.cosmo.chat.ChatNotifier
 import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.anchor.AnchorTransfersController
@@ -77,21 +78,27 @@ import com.rivers.cosmo.ui.wallet.WalletDashboard
 import com.rivers.cosmo.ui.wallet.walletModules
 import com.rivers.cosmo.wallet.WalletBalance
 import com.rivers.cosmo.wallet.WalletController
+import com.rivers.cosmo.wallet.XlmPrice
+import com.rivers.cosmo.wallet.XlmPriceFeed
 import com.rivers.cosmo.wallet.formatAmount
 import com.rivers.cosmo.wallet.shortenAddress
 import java.math.BigDecimal
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private enum class MainTab(val label: String, val icon: ImageVector) {
     Wallet("Wallet", Icons.Filled.AccountBalanceWallet),
     Payments("Payments", Icons.Filled.Payments),
-    Transfers("Transfers", Icons.Filled.SwapHoriz),
+    Transfers("Move", Icons.Filled.SwapHoriz),
     Marketplace("Market", Icons.Filled.Storefront),
     Chat("Chat", Icons.AutoMirrored.Filled.Chat),
     Settings("Settings", Icons.Filled.Settings)
 }
 
 private const val PAYMENTS_LIST = "list"
+private const val PRICE_REFRESH_MS = 60_000L
 private const val PAYMENT_FORM = "pay"
 private const val SPLIT_CREATE = "create"
 private const val SPLIT_JOIN = "join"
@@ -170,9 +177,20 @@ fun MainScreen(
         )
     }
 
+    // XLM's price for plugins, from the public DEX; fetched only while a plugin could show it.
+    val priceFeed = remember { XlmPriceFeed() }
+    var xlmPrice by remember { mutableStateOf<XlmPrice?>(null) }
+    val pluginsEnabled = pluginState.plugins.any { it.plugin.enabled }
+    LaunchedEffect(onScreen, pluginsEnabled) {
+        while (onScreen && pluginsEnabled) {
+            runCatching { withContext(Dispatchers.IO) { priceFeed.fetch() } }.getOrNull()?.let { xlmPrice = it }
+            delay(PRICE_REFRESH_MS)
+        }
+    }
+
     // Plugins see a read-only snapshot of the wallet, refreshed whenever it changes.
-    LaunchedEffect(walletState, kycState.status) {
-        plugins.updateData(WalletData.json(userId, walletState, kycState.status))
+    LaunchedEffect(walletState, kycState.status, xlmPrice) {
+        plugins.updateData(WalletData.json(userId, walletState, kycState.status, xlmPrice))
     }
 
     // What plugins ask for: messages, or a payment the user reviews in the normal form.
@@ -295,7 +313,8 @@ fun MainScreen(
                                 Icon(item.icon, contentDescription = null)
                             }
                         },
-                        label = { Text(item.label) }
+                        // Six tabs share the width: a smaller size, kept to one line, fits wide custom fonts too.
+                        label = { Text(item.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip) }
                     )
                 }
             }

@@ -50,7 +50,7 @@ fun ChatScreen(
     val modules = listOf(
         DashboardModule("status", "Connection") { ConnectionStatus(state, onReconnect) },
         DashboardModule("identity", "Your Cosmo ID") { IdentityCard(userId, state) },
-        DashboardModule("start", "Start a chat") { StartChat(state, opening, onStartChat) },
+        DashboardModule("start", "Start a chat") { StartChat(userId, state, opening, onStartChat) },
         DashboardModule("conversations", "Conversations", isEmpty = state.conversations.isEmpty(), emptyHint = "Your conversations appear here") {
             Conversations(state, onOpenConversation)
         }
@@ -81,7 +81,7 @@ private fun IdentityCard(userId: String, state: ChatService.State) {
 }
 
 @Composable
-private fun StartChat(state: ChatService.State, opening: Boolean, onStartChat: (cosmoId: String) -> Unit) {
+private fun StartChat(userId: String, state: ChatService.State, opening: Boolean, onStartChat: (cosmoId: String) -> Unit) {
     var cosmoId by rememberSaveable { mutableStateOf("") }
     val normalized = UserIdGenerator.normalize(cosmoId)
     val invalid = cosmoId.isNotBlank() && !UserIdGenerator.isValid(normalized)
@@ -113,10 +113,14 @@ private fun StartChat(state: ChatService.State, opening: Boolean, onStartChat: (
                 onStartChat(normalized)
                 cosmoId = ""
             },
-            enabled = online && !opening && UserIdGenerator.isValid(normalized),
+            // Notes to self need no connection or key lookup.
+            enabled = (online || normalized == userId) && !opening && UserIdGenerator.isValid(normalized),
             modifier = Modifier.fillMaxWidth()
         ) {
             Text(if (opening) "Looking up their key…" else "Start chat")
+        }
+        TextButton(onClick = { onStartChat(userId) }, enabled = !opening, modifier = Modifier.fillMaxWidth()) {
+            Text("Message yourself")
         }
     }
 }
@@ -137,8 +141,8 @@ private fun Conversations(state: ChatService.State, onOpenConversation: (cosmoId
                     Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(
-                                conversation.contactId,
-                                fontFamily = FontFamily.Monospace,
+                                if (conversation.self) "Notes to self" else conversation.contactId,
+                                fontFamily = if (conversation.self) null else FontFamily.Monospace,
                                 fontWeight = if (conversation.unread > 0) FontWeight.Bold else null
                             )
                             Text(
