@@ -29,6 +29,9 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import com.rivers.cosmo.auth.AccountStore
+import com.rivers.cosmo.auth.AuthService
+import com.rivers.cosmo.auth.SupabaseAccountDirectory
+import com.rivers.cosmo.auth.SupabaseConfig
 import com.rivers.cosmo.auth.SeedPhrase
 import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.anchor.AnchorTransfersController
@@ -66,6 +69,9 @@ class Main : ComponentActivity() {
         if (savedInstanceState == null) receive(intent)
         enableEdgeToEdge()
         val accountStore = AccountStore(applicationContext)
+        // Accounts live in Supabase when it's set up (see app/build.gradle.kts), otherwise on this device only.
+        val supabase = SupabaseConfig(BuildConfig.SUPABASE_URL, BuildConfig.SUPABASE_ANON_KEY)
+        val auth = AuthService(accountStore, supabase.takeIf { it.configured }?.let(::SupabaseAccountDirectory))
         val settingsStore = SettingsStore(applicationContext)
         val fontStore = CustomFontStore(applicationContext)
         val seedPhrase = SeedPhrase(assets.open(SeedPhrase.WORD_LIST_ASSET).bufferedReader().use { it.readLines() })
@@ -100,6 +106,7 @@ class Main : ComponentActivity() {
                         AppBackground(settings.background, Modifier.fillMaxSize())
                         CosmoApp(
                             accountStore = accountStore,
+                            auth = auth,
                             seedPhrase = seedPhrase,
                             fontStore = fontStore,
                             settings = settings,
@@ -133,6 +140,7 @@ private enum class AuthScreen { Welcome, SignUp, LogIn }
 @Composable
 fun CosmoApp(
     accountStore: AccountStore,
+    auth: AuthService,
     seedPhrase: SeedPhrase,
     fontStore: CustomFontStore,
     settings: AppSettings,
@@ -217,6 +225,7 @@ fun CosmoApp(
             screen = screen,
             onScreenChange = { screen = it },
             accountStore = accountStore,
+            auth = auth,
             walletKeys = walletKeys,
             seedPhrase = seedPhrase,
             onSignedIn = { userId = it },
@@ -239,6 +248,7 @@ private fun AuthFlow(
     screen: AuthScreen,
     onScreenChange: (AuthScreen) -> Unit,
     accountStore: AccountStore,
+    auth: AuthService,
     walletKeys: WalletKeyStore,
     seedPhrase: SeedPhrase,
     onSignedIn: (userId: String) -> Unit,
@@ -265,6 +275,7 @@ private fun AuthFlow(
             )
             AuthScreen.SignUp -> SignUpScreen(
                 accountStore = accountStore,
+                auth = auth,
                 walletKeys = walletKeys,
                 seedPhrase = seedPhrase,
                 onSignedUp = onSignedIn,
@@ -272,7 +283,7 @@ private fun AuthFlow(
                 modifier = modifier
             )
             AuthScreen.LogIn -> LogInScreen(
-                accountStore = accountStore,
+                auth = auth,
                 walletKeys = walletKeys,
                 seedPhrase = seedPhrase,
                 onLoggedIn = onSignedIn,

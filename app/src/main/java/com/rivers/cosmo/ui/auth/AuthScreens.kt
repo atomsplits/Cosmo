@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.auth.AccountStore
+import com.rivers.cosmo.auth.AuthService
 import com.rivers.cosmo.auth.SeedPhrase
 import com.rivers.cosmo.auth.UserIdGenerator
 import com.rivers.cosmo.wallet.WalletKeyStore
@@ -87,6 +88,7 @@ fun WelcomeScreen(
 @Composable
 fun SignUpScreen(
     accountStore: AccountStore,
+    auth: AuthService,
     walletKeys: WalletKeyStore,
     seedPhrase: SeedPhrase,
     onSignedUp: (userId: String) -> Unit,
@@ -98,6 +100,7 @@ fun SignUpScreen(
     var phrase by rememberSaveable { mutableStateOf(seedPhrase.generate().joinToString(" ")) }
     var confirmed by rememberSaveable { mutableStateOf(false) }
     var working by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
 
     Column(
@@ -133,6 +136,7 @@ fun SignUpScreen(
                 userId = accountStore.newUserId()
                 phrase = seedPhrase.generate().joinToString(" ")
                 confirmed = false
+                error = null
             },
             enabled = !working,
             modifier = Modifier.fillMaxWidth()
@@ -151,17 +155,26 @@ fun SignUpScreen(
             Text("I've written down my user ID and recovery phrase")
         }
 
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium) }
+
         Button(
             onClick = {
                 working = true
+                error = null
                 scope.launch {
-                    withContext(Dispatchers.Default) {
-                        val words = phrase.split(" ")
-                        accountStore.register(userId, words)
-                        // The phrase is also the user's Stellar wallet, so keep it for signing payments.
-                        walletKeys.save(userId, words)
+                    val words = phrase.split(" ")
+                    val result = withContext(Dispatchers.IO) {
+                        // Registers the account in Supabase (only a hash derived from the phrase is sent).
+                        auth.signUp(userId, words).also {
+                            // The phrase is also the user's Stellar wallet, so keep it for signing payments.
+                            if (it is AuthService.Result.Success) walletKeys.save(userId, words)
+                        }
                     }
-                    onSignedUp(userId)
+                    working = false
+                    when (result) {
+                        is AuthService.Result.Success -> onSignedUp(userId)
+                        is AuthService.Result.Failure -> error = result.message
+                    }
                 }
             },
             enabled = confirmed && !working,
@@ -174,7 +187,7 @@ fun SignUpScreen(
 
 @Composable
 fun LogInScreen(
-    accountStore: AccountStore,
+    auth: AuthService,
     walletKeys: WalletKeyStore,
     seedPhrase: SeedPhrase,
     onLoggedIn: (userId: String) -> Unit,
@@ -204,15 +217,13 @@ fun LogInScreen(
         val userId = UserIdGenerator.normalize(userIdInput)
         working = true
         scope.launch {
-            val ok = withContext(Dispatchers.Default) {
-                accountStore.logIn(userId, words).also { if (it) walletKeys.save(userId, words) }
+            val result = withContext(Dispatchers.IO) {
+                auth.logIn(userId, words).also { if (it is AuthService.Result.Success) walletKeys.save(userId, words) }
             }
             working = false
-            if (ok) {
-                onLoggedIn(userId)
-            } else {
-                error = "User ID or recovery phrase is incorrect. Accounts are stored on the " +
-                    "device they were created on."
+            when (result) {
+                is AuthService.Result.Success -> onLoggedIn(userId)
+                is AuthService.Result.Failure -> error = result.message
             }
         }
     }

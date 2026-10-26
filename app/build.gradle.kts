@@ -3,6 +3,15 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
+// Supabase connection details, kept out of git: set supabase.url and supabase.anonKey in
+// local.properties (or SUPABASE_URL / SUPABASE_ANON_KEY in the environment, e.g. on CI).
+// Without them the app keeps accounts on the device only.
+val localProperties = java.util.Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun buildSetting(property: String, environment: String): String =
+    (localProperties.getProperty(property) ?: System.getenv(environment) ?: "").trim().replace("\"", "")
+
 android {
     namespace = "com.rivers.cosmo"
     compileSdk {
@@ -19,6 +28,9 @@ android {
         versionName = "1.0"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+
+        buildConfigField("String", "SUPABASE_URL", "\"${buildSetting("supabase.url", "SUPABASE_URL")}\"")
+        buildConfigField("String", "SUPABASE_ANON_KEY", "\"${buildSetting("supabase.anonKey", "SUPABASE_ANON_KEY")}\"")
     }
 
     buildTypes {
@@ -33,6 +45,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
     packaging {
         resources {

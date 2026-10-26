@@ -9,12 +9,13 @@ import javax.crypto.SecretKeyFactory
 import javax.crypto.spec.PBEKeySpec
 
 /**
- * Keeps accounts on this device. The recovery phrase itself is never stored: only a salted
- * PBKDF2 hash of it, which is enough to check a log-in but not to recover the phrase.
+ * Keeps accounts on this device, for logging in offline (accounts themselves live in Supabase, see
+ * [AuthService]). The recovery phrase itself is never stored: only a salted PBKDF2 hash of it,
+ * which is enough to check a log-in but not to recover the phrase.
  *
  * [register] and [logIn] are deliberately slow (key stretching), so call them off the main thread.
  */
-class AccountStore(context: Context) {
+class AccountStore(context: Context) : LocalAccounts {
 
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
@@ -30,7 +31,7 @@ class AccountStore(context: Context) {
         return userId
     }
 
-    fun register(userId: String, phrase: List<String>) {
+    override fun register(userId: String, phrase: List<String>) {
         val salt = ByteArray(SALT_BYTES).also(SecureRandom()::nextBytes)
         val algorithm = preferredAlgorithm()
         val record = listOf(algorithm, encode(salt), encode(hash(algorithm, phrase, salt))).joinToString(":")
@@ -41,7 +42,7 @@ class AccountStore(context: Context) {
     }
 
     /** Returns true and starts a session when [phrase] matches the account for [userId]. */
-    fun logIn(userId: String, phrase: List<String>): Boolean {
+    override fun logIn(userId: String, phrase: List<String>): Boolean {
         val record = prefs.getString(accountKey(userId), null) ?: return false
         val (algorithm, salt, expected) = record.split(":")
         val matches = MessageDigest.isEqual(hash(algorithm, phrase, decode(salt)), decode(expected))
