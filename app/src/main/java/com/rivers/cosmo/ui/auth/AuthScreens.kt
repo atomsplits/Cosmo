@@ -43,6 +43,7 @@ import androidx.compose.ui.unit.dp
 import com.rivers.cosmo.auth.AccountStore
 import com.rivers.cosmo.auth.SeedPhrase
 import com.rivers.cosmo.auth.UserIdGenerator
+import com.rivers.cosmo.wallet.WalletKeyStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -86,6 +87,7 @@ fun WelcomeScreen(
 @Composable
 fun SignUpScreen(
     accountStore: AccountStore,
+    walletKeys: WalletKeyStore,
     seedPhrase: SeedPhrase,
     onSignedUp: (userId: String) -> Unit,
     onBack: () -> Unit,
@@ -153,7 +155,12 @@ fun SignUpScreen(
             onClick = {
                 working = true
                 scope.launch {
-                    withContext(Dispatchers.Default) { accountStore.register(userId, phrase.split(" ")) }
+                    withContext(Dispatchers.Default) {
+                        val words = phrase.split(" ")
+                        accountStore.register(userId, words)
+                        // The phrase is also the user's Stellar wallet, so keep it for signing payments.
+                        walletKeys.save(userId, words)
+                    }
                     onSignedUp(userId)
                 }
             },
@@ -168,6 +175,7 @@ fun SignUpScreen(
 @Composable
 fun LogInScreen(
     accountStore: AccountStore,
+    walletKeys: WalletKeyStore,
     seedPhrase: SeedPhrase,
     onLoggedIn: (userId: String) -> Unit,
     onBack: () -> Unit,
@@ -196,7 +204,9 @@ fun LogInScreen(
         val userId = UserIdGenerator.normalize(userIdInput)
         working = true
         scope.launch {
-            val ok = withContext(Dispatchers.Default) { accountStore.logIn(userId, words) }
+            val ok = withContext(Dispatchers.Default) {
+                accountStore.logIn(userId, words).also { if (it) walletKeys.save(userId, words) }
+            }
             working = false
             if (ok) {
                 onLoggedIn(userId)

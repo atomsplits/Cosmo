@@ -56,11 +56,3 @@ fun parseAmount(text: String): BigDecimal? {
     if (!AMOUNT_PATTERN.matches(trimmed)) return null
     return BigDecimal(trimmed).takeIf { it.signum() > 0 }
 }
-
-/** The cryptocurrencies a transfer can be made in. */
-enum class Crypto(val code: String, val displayName: String) {
-    XLM("XLM", "Stellar Lumens"),
-    USDC("USDC", "USD Coin"),
-    BTC("BTC", "Bitcoin"),
-    ETH("ETH", "Ethereum")
-}

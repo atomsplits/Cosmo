@@ -9,6 +9,7 @@ import androidx.compose.ui.text.font.FontVariation
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.font.Typeface
 import com.rivers.cosmo.R
+import com.rivers.cosmo.fonts.CustomFont
 import com.rivers.cosmo.settings.AppFont
 
 // Bundled fonts are open source (SIL Open Font License, see assets/font_licenses). Helvetica itself
@@ -38,6 +39,12 @@ val AppFont.fontFamily: FontFamily
             )
         }
     }
+
+private val customFamilies = mutableMapOf<String, FontFamily>()
+
+/** A font the user added, loaded from the TrueType file made when they imported it. */
+val CustomFont.fontFamily: FontFamily
+    get() = customFamilies.getOrPut(file.path) { FontFamily(Typeface(AndroidTypeface.createFromFile(file))) }
 
 /** A font that ships with Android, looked up by its system name. */
 private fun systemFamily(name: String) = FontFamily(Typeface(AndroidTypeface.create(name, AndroidTypeface.NORMAL)))

@@ -10,13 +10,13 @@ import org.junit.Test
 class ValidationTest {
     @Test
     fun acceptsRealStellarAddresses() {
-        assertTrue(StellarAddress.isValid(Wallet.demo.id))
+        assertTrue(StellarAddress.isValid(Wallet.DEMO_ADDRESS))
         assertTrue(StellarAddress.isValid("GBRPYHIL2CI3FNQ4BXLFMNDLFJUNPU2HY3ZMFSHONUCEOASW7QC7OX2H"))
     }
 
     @Test
     fun rejectsBadStellarAddresses() {
-        val good = Wallet.demo.id
+        val good = Wallet.DEMO_ADDRESS
         assertFalse(StellarAddress.isValid(""))
         assertFalse(StellarAddress.isValid(good.dropLast(1)))
         assertFalse(StellarAddress.isValid(good.lowercase()))

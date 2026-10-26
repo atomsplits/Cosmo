@@ -12,6 +12,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExposedDropdownMenuBox
 import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -23,8 +24,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import com.rivers.cosmo.wallet.Crypto
+import com.rivers.cosmo.wallet.WalletBalance
+import com.rivers.cosmo.wallet.formatAmount
 import com.rivers.cosmo.wallet.parseAmount
+import com.rivers.cosmo.wallet.shortenAddress
 
 /** A scrollable column with the standard page padding used by every tab. */
 @Composable
@@ -64,9 +67,15 @@ fun AmountField(
     )
 }
 
+/** Picks which of the account's assets to send. */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CryptoSelector(selected: Crypto, onSelected: (Crypto) -> Unit, modifier: Modifier = Modifier) {
+fun AssetSelector(
+    balances: List<WalletBalance>,
+    selected: WalletBalance,
+    onSelected: (WalletBalance) -> Unit,
+    modifier: Modifier = Modifier
+) {
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -74,21 +83,21 @@ fun CryptoSelector(selected: Crypto, onSelected: (Crypto) -> Unit, modifier: Mod
         modifier = modifier.fillMaxWidth()
     ) {
         OutlinedTextField(
-            value = "${selected.displayName} (${selected.code})",
+            value = assetLabel(selected),
             onValueChange = {},
             readOnly = true,
-            label = { Text("Cryptocurrency") },
+            label = { Text("Asset") },
             trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
             modifier = Modifier
-                .menuAnchor()
+                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
                 .fillMaxWidth()
         )
         ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false }) {
-            Crypto.entries.forEach { crypto ->
+            balances.forEach { balance ->
                 DropdownMenuItem(
-                    text = { Text("${crypto.displayName} (${crypto.code})") },
+                    text = { Text("${assetLabel(balance)} · ${formatAmount(balance.amount, balance.code)}") },
                     onClick = {
-                        onSelected(crypto)
+                        onSelected(balance)
                         expanded = false
                     }
                 )
@@ -96,3 +105,7 @@ fun CryptoSelector(selected: Crypto, onSelected: (Crypto) -> Unit, modifier: Mod
         }
     }
 }
+
+/** e.g. "XLM (Stellar Lumens)" or "USDC · GA5Z…KZVN" so look-alike assets from different issuers stay distinguishable. */
+fun assetLabel(balance: WalletBalance): String =
+    if (balance.issuer == null) "XLM (Stellar Lumens)" else "${balance.code} · ${shortenAddress(balance.issuer)}"

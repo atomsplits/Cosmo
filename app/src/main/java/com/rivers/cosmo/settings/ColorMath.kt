@@ -45,6 +45,13 @@ object ColorMath {
         return argb(((r + m) * 255).roundToInt(), ((g + m) * 255).roundToInt(), ((b + m) * 255).roundToInt())
     }
 
+    /** Blends [from] towards [to] by [fraction] (0 = all [from], 1 = all [to]), channel by channel. */
+    fun mix(from: Int, to: Int, fraction: Float): Int {
+        val t = fraction.coerceIn(0f, 1f)
+        fun channel(a: Int, b: Int) = (a + (b - a) * t).roundToInt()
+        return argb(channel(red(from), red(to)), channel(green(from), green(to)), channel(blue(from), blue(to)))
+    }
+
     /** e.g. `#1A2B3C`. */
     fun toHex(argb: Int): String = "#%06X".format(argb and 0xFFFFFF)
 

@@ -42,4 +42,12 @@ class ColorMathTest {
         assertEquals(1.0, ColorMath.contrastRatio(red, red), 0.01)
         assertEquals(4.0, ColorMath.contrastRatio(red, white), 0.01)
     }
+
+    @Test
+    fun mixesColors() {
+        assertEquals(black, ColorMath.mix(black, white, 0f))
+        assertEquals(white, ColorMath.mix(black, white, 1f))
+        assertEquals(0xFF808080.toInt(), ColorMath.mix(black, white, 0.5f))
+        assertEquals(white, ColorMath.mix(black, white, 7f)) // clamped
+    }
 }
