@@ -30,6 +30,12 @@ fun supabaseApiUrl(setting: String): String {
         return "https://$ref.supabase.co"
     }
     if (!setting.startsWith("https://")) throw GradleException("supabase.url must be the project URL, like https://<ref>.supabase.co")
+    // https://db.<ref>.supabase.co is the database's host, which doesn't serve the API.
+    Regex("""^https://db\.([a-z0-9]+)\.supabase\.co/?$""").find(setting)?.let { match ->
+        val ref = match.groupValues[1]
+        logger.warn("supabase.url is the database host; using the API URL https://$ref.supabase.co instead. Please change it in local.properties.")
+        return "https://$ref.supabase.co"
+    }
     return setting.trimEnd('/')
 }
 
@@ -45,7 +51,7 @@ fun checkSupabaseKey(key: String, url: String) {
     if (role != "anon") throw GradleException("supabase.anonKey has role '$role'. Use the anon key, never service_role: it bypasses all security and must never be in the app.")
     val ref = Regex(""""ref"\s*:\s*"([^"]+)"""").find(payload)?.groupValues?.get(1)
     if (ref != null && url.isNotEmpty() && !url.startsWith("https://$ref.")) {
-        throw GradleException("supabase.anonKey is for project '$ref', but supabase.url is $url.")
+        throw GradleException("supabase.anonKey is for project '$ref', but supabase.url is $url. Set supabase.url=https://$ref.supabase.co in local.properties (or use that project's anon key).")
     }
 }
 
