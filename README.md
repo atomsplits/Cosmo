@@ -157,9 +157,9 @@ device or emulator on API 24 or later.
 
 | | Link |
 | --- | --- |
-| 🎥 Demo video | _add link_ |
-| 📊 Pitch deck | _add link_ |
-| 📱 APK | _add link (GitHub release)_ |
+| 🎥 Demo video | _https://www.youtube.com/watch?v=2fXxoGjBR3s_ |
+| 📊 Pitch deck | _https://smallpdf.com/file#s=70005e22-c30e-454e-834d-f04549ea2669_ |
+| 📱 APK | _https://github.com/atomsplits/Cosmo/releases/tag/alpha_ |
 
 **Suggested demo flow (about 3 minutes):**
 
@@ -216,7 +216,7 @@ This is a hackathon build. It runs on **Stellar Testnet** by default.
 
 ## Team
 
-_Add team members and roles._
+_Team Rivers -> Maxim Pankratov: UX, Programming, Design, Pitch Deck, Demo_
 
 ---
 
