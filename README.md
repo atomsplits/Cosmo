@@ -22,6 +22,14 @@ hand, leave the wallet to chat about the payment, and leave again to cash out. S
 or selling a digital good to someone you met online means trusting a platform that holds your
 money, or trusting the other person.
 
+Standard wallets also all look and work the same. You get a balance, a send button and a
+transaction list in a fixed layout. You can't rearrange the screen around what you use, change
+how it looks beyond light or dark mode, or add the small tools you'd want every day, like a
+savings goal, a tip jar or a summary of your spending. Everyday conveniences, such as scanning a
+QR code to join a shared bill, getting notified when a friend messages you, or seeing who still
+owes their share, are missing or live in separate apps. A wallet is something people open every
+day, but most feel like a bank statement rather than an app built for them.
+
 ## What Cosmo does
 
 Cosmo is a self-custodial Android wallet built around people instead of addresses. Every user gets
@@ -168,7 +176,7 @@ device or emulator on API 24 or later.
 
 | Criterion | Where to look |
 | --- | --- |
-| **Problem clarity** | [The problem](#the-problem): payments between people still feel like trading tools, and selling to strangers needs a trusted middleman. |
+| **Problem clarity** | [The problem](#the-problem): payments between people still feel like trading tools, selling to strangers needs a trusted middleman, and wallets are bland, rigid and short on everyday conveniences. |
 | **MVP quality** | A complete Android app with 8 working areas, a relay server, a database schema, and unit tests across the wallet, escrow, splits, trading, chat and plugins. |
 | **Stellar integration** | Multisig, pre-authorized transactions, hash-lock signers, time bounds, path payments, memos, and SEP-1, SEP-10, SEP-12 and SEP-24 ([details](#how-cosmo-uses-stellar)). |
 | **Continued development** | See the [roadmap](#roadmap). |
