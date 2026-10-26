@@ -40,6 +40,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextOverflow
 import com.rivers.cosmo.chat.ChatNotifier
 import com.rivers.cosmo.chat.ChatService
 import com.rivers.cosmo.anchor.AnchorTransfersController
@@ -312,7 +313,8 @@ fun MainScreen(
                                 Icon(item.icon, contentDescription = null)
                             }
                         },
-                        label = { Text(item.label) }
+                        // Six tabs share the width: a smaller size, kept to one line, fits wide custom fonts too.
+                        label = { Text(item.label, style = MaterialTheme.typography.labelSmall, maxLines = 1, softWrap = false, overflow = TextOverflow.Clip) }
                     )
                 }
             }
