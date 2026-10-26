@@ -1,0 +1,4 @@
+# Marks this folder as the Supabase project for the CLI and the Supabase GitHub integration,
+# which apply supabase/migrations to the project. Everything else uses Supabase's defaults; set
+# auth, API and storage settings in the dashboard rather than here.
+project_id = "cosmo"

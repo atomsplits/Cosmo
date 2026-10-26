@@ -8,12 +8,15 @@
 --
 -- The table isn't readable or writable by the app's roles at all; the two functions below are
 -- the only way in.
+--
+-- Safe to run more than once (e.g. pasted into the SQL editor, then applied again by the GitHub
+-- integration): it never drops or changes existing accounts.
 
 -- Supabase has pgcrypto installed in the "extensions" schema already; this is for fresh databases.
 create schema if not exists extensions;
 create extension if not exists pgcrypto with schema extensions;
 
-create table public.accounts (
+create table if not exists public.accounts (
     -- Same format the app generates: COSMO-XXXX-XXXX, without the easily confused 0/O, 1/I/L, U/V.
     cosmo_id text primary key
         check (cosmo_id ~ '^COSMO-[A-HJKMNP-TW-Z2-9]{4}-[A-HJKMNP-TW-Z2-9]{4}$'),
@@ -26,7 +29,7 @@ alter table public.accounts enable row level security;
 revoke all on table public.accounts from public, anon, authenticated;
 
 -- Creates an account. Returns false if the Cosmo ID is already taken (nothing is changed then).
-create function public.register_account(p_cosmo_id text, p_verifier text)
+create or replace function public.register_account(p_cosmo_id text, p_verifier text)
 returns boolean
 language plpgsql
 security definer
@@ -49,7 +52,7 @@ end;
 $$;
 
 -- Checks a log-in: 'ok', 'mismatch' (wrong phrase), or 'unknown' (no such Cosmo ID).
-create function public.verify_account(p_cosmo_id text, p_verifier text)
+create or replace function public.verify_account(p_cosmo_id text, p_verifier text)
 returns text
 language plpgsql
 stable

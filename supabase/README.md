@@ -1,7 +1,17 @@
 # Supabase
 
-Database migrations for Cosmo's Supabase project. With the GitHub integration connected, they're
-applied automatically when they reach the production branch; otherwise run `supabase db push`.
+Database migrations for Cosmo's Supabase project. Every migration is safe to run more than once,
+so the ways of applying them below can be mixed.
+
+## Applying the migrations
+
+- **By hand (quickest):** in the dashboard, open SQL Editor → New query, paste each file from
+  `migrations/` in order (oldest first), and run it.
+- **GitHub integration:** in the dashboard, under Project Settings → Integrations → GitHub, connect
+  the repository, set the Supabase directory to `supabase`, set the production branch to `master`,
+  and turn on **Deploy to production**. New migrations are then applied when they're merged into
+  `master`; a migration that's only on another branch isn't applied to production.
+- **Supabase CLI:** `supabase link --project-ref <project-ref>`, then `supabase db push`.
 
 | Migration | What it adds |
 | --- | --- |

@@ -1,8 +1,8 @@
 -- Public PGP keys for Cosmo chat, one per Cosmo ID.
 -- Not used yet: the chat relay (server/) keeps this mapping in memory for now.
--- Apply with the Supabase CLI: supabase db push
+-- Apply with the Supabase CLI: supabase db push. Safe to run more than once.
 
-create table public.public_keys (
+create table if not exists public.public_keys (
     -- Same format the app generates: COSMO-XXXX-XXXX, without the easily confused 0/O, 1/I/L, U/V.
     cosmo_id text primary key
         check (cosmo_id ~ '^COSMO-[A-HJKMNP-TW-Z2-9]{4}-[A-HJKMNP-TW-Z2-9]{4}$'),
@@ -15,6 +15,7 @@ create table public.public_keys (
 alter table public.public_keys enable row level security;
 
 -- Public keys are meant to be public: anyone may look one up.
+drop policy if exists "Public keys are readable by everyone" on public.public_keys;
 create policy "Public keys are readable by everyone"
     on public.public_keys for select
     using (true);
