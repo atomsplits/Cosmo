@@ -55,7 +55,9 @@ class ChatService(
 ) {
     enum class Connection { Connecting, Online, Offline }
 
-    enum class Status { Sending, Delivered, Queued, Failed, Received }
+    enum class Status { Sending, Delivered, Queued, Failed, Received,
+        /** A note to self: kept on this phone, never sent. */
+        Saved }
 
     data class ChatMessage(
         val id: String,
@@ -75,7 +77,9 @@ class ChatService(
         val keyChanged: Boolean = false,
         val messages: List<ChatMessage> = emptyList(),
         /** Received messages that arrived while this conversation wasn't open. */
-        val unread: Int = 0
+        val unread: Int = 0,
+        /** The user's own conversation (notes to self), which stays on this phone. */
+        val self: Boolean = false
     )
 
     data class State(
@@ -156,7 +160,13 @@ class ChatService(
 
     /** Looks up [contactId]'s key and checks it against the pinned one, then opens the conversation. */
     suspend fun openConversation(contactId: String): Result<Unit> = runCatching {
-        require(contactId != userId) { "That's your own Cosmo ID." }
+        if (contactId == userId) {
+            _state.update { state ->
+                if (contactId in state.conversations) state
+                else state.copy(conversations = state.conversations + (contactId to Conversation(contactId, state.ownFingerprint, self = true)))
+            }
+            return@runCatching
+        }
         if (state.value.conversations[contactId]?.keyChanged == false) return@runCatching
 
         val armoredKey = keyDirectory.fetch(contactId) ?: throw IllegalStateException(
@@ -176,6 +186,10 @@ class ChatService(
     fun send(contactId: String, text: String) {
         val conversation = state.value.conversations[contactId] ?: return
         if (conversation.keyChanged || text.isBlank()) return
+        if (conversation.self) {
+            addMessage(contactId, ChatMessage(UUID.randomUUID().toString(), userId, text.trim(), System.currentTimeMillis(), outgoing = true, Status.Saved))
+            return
+        }
         val message = ChatMessage(UUID.randomUUID().toString(), userId, text.trim(), System.currentTimeMillis(), outgoing = true, Status.Sending)
         addMessage(contactId, message)
 

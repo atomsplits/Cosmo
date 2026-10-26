@@ -54,7 +54,7 @@ fun ConversationScreen(
     var draft by rememberSaveable { mutableStateOf("") }
     var showFingerprint by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
-    val canSend = online && !conversation.keyChanged
+    val canSend = conversation.self || (online && !conversation.keyChanged)
     val motion = LocalMotion.current
 
     LaunchedEffect(conversation.messages.size) {
@@ -64,18 +64,29 @@ fun ConversationScreen(
     Column(modifier.imePadding()) {
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(horizontal = 8.dp)) {
             TextButton(onClick = onBack) { Text("Back") }
-            Column(
-                Modifier
-                    .weight(1f)
-                    .clickable(onClickLabel = "Show encryption key") { showFingerprint = !showFingerprint }
-                    .padding(8.dp)
-            ) {
-                Text(conversation.contactId, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace)
-                Text(
-                    if (showFingerprint) "Tap to hide their key" else "🔒 End-to-end encrypted · tap to verify",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            if (conversation.self) {
+                Column(Modifier.weight(1f).padding(8.dp)) {
+                    Text("Notes to self", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "📝 Only on this phone, never sent",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            } else {
+                Column(
+                    Modifier
+                        .weight(1f)
+                        .clickable(onClickLabel = "Show encryption key") { showFingerprint = !showFingerprint }
+                        .padding(8.dp)
+                ) {
+                    Text(conversation.contactId, style = MaterialTheme.typography.titleMedium, fontFamily = FontFamily.Monospace)
+                    Text(
+                        if (showFingerprint) "Tap to hide their key" else "🔒 End-to-end encrypted · tap to verify",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
             }
         }
 
@@ -127,7 +138,7 @@ fun ConversationScreen(
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it },
-                placeholder = { Text(if (online) "Message" else "Waiting for connection…") },
+                placeholder = { Text(if (conversation.self) "Note to self" else if (online) "Message" else "Waiting for connection…") },
                 enabled = canSend,
                 maxLines = 4,
                 keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences, imeAction = ImeAction.Default),
@@ -154,6 +165,7 @@ private fun MessageBubble(message: ChatService.ChatMessage, modifier: Modifier =
         ChatService.Status.Delivered -> "Delivered"
         ChatService.Status.Queued -> "Sent · they're offline"
         ChatService.Status.Failed -> "Not sent"
+        ChatService.Status.Saved -> null
         ChatService.Status.Received -> if (message.verified) null else "⚠ Signature not verified"
     }
     Box(modifier.fillMaxWidth(), contentAlignment = if (message.outgoing) Alignment.CenterEnd else Alignment.CenterStart) {
