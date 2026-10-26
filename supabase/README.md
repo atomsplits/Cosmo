@@ -15,8 +15,9 @@ so the ways of applying them below can be mixed.
 
 | Migration | What it adds |
 | --- | --- |
-| `…_public_keys.sql` | Public PGP keys per Cosmo ID (not used by the app yet) |
+| `…_public_keys.sql` | Public chat (PGP) keys per Cosmo ID, readable by anyone |
 | `…_accounts.sql` | Accounts: a Cosmo ID and a hash derived from its recovery phrase, for logging in |
+| `…_publish_public_key.sql` | Lets an account publish its chat key, so chat can find users who are offline |
 
 ## Connecting the app
 
@@ -65,12 +66,17 @@ The 12-word recovery phrase is also the user's Stellar wallet key, so it never l
 
 So someone with a copy of the table can't recover phrases or wallets, and can't log in either: the
 stored value isn't what the app sends. The app's anon key can't read or write the table at all.
-It can only call two functions:
+It can only call these functions:
 
 | Function (`POST /rest/v1/rpc/…`) | Returns |
 | --- | --- |
 | `register_account(p_cosmo_id, p_verifier)` | `true`, or `false` if the Cosmo ID is taken |
 | `verify_account(p_cosmo_id, p_verifier)` | `"ok"`, `"mismatch"` or `"unknown"` |
+| `publish_public_key(p_cosmo_id, p_verifier, p_fingerprint, p_armored_key)` | `true`, or `false` if the account or verifier is wrong |
+
+Chat keys are public: `GET /rest/v1/public_keys?cosmo_id=eq.<Cosmo ID>` returns one. The app
+publishes its key each time chat starts, and trusts the first key it sees for each contact, so a
+changed key (for example after logging in on a new phone) is flagged in the conversation.
 
 The phone also remembers accounts it has used, so logging in works offline, and accounts created on
 a phone before Supabase was connected are moved to Supabase the next time they log in.

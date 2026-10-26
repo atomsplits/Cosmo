@@ -91,11 +91,12 @@ fun SignUpScreen(
     auth: AuthService,
     walletKeys: WalletKeyStore,
     seedPhrase: SeedPhrase,
+    allowScreenCapture: Boolean,
     onSignedUp: (userId: String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    SecureScreen()
+    SecureScreen(enabled = !allowScreenCapture)
     var userId by rememberSaveable { mutableStateOf(accountStore.newUserId()) }
     var phrase by rememberSaveable { mutableStateOf(seedPhrase.generate().joinToString(" ")) }
     var confirmed by rememberSaveable { mutableStateOf(false) }
@@ -190,11 +191,12 @@ fun LogInScreen(
     auth: AuthService,
     walletKeys: WalletKeyStore,
     seedPhrase: SeedPhrase,
+    allowScreenCapture: Boolean,
     onLoggedIn: (userId: String) -> Unit,
     onBack: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    SecureScreen()
+    SecureScreen(enabled = !allowScreenCapture)
     var userIdInput by rememberSaveable { mutableStateOf("") }
     var phraseInput by rememberSaveable { mutableStateOf("") }
     var error by rememberSaveable { mutableStateOf<String?>(null) }
@@ -300,11 +302,15 @@ private fun SeedPhraseGrid(words: List<String>) {
     }
 }
 
-/** Blocks screenshots and screen recording while a recovery phrase is on screen. */
+/**
+ * Blocks screenshots and screen recording while a recovery phrase is on screen, unless the user
+ * allowed screen capture in Settings.
+ */
 @Composable
-private fun SecureScreen() {
+private fun SecureScreen(enabled: Boolean) {
     val window = (LocalContext.current as? Activity)?.window
-    DisposableEffect(window) {
+    DisposableEffect(window, enabled) {
+        if (!enabled) return@DisposableEffect onDispose { }
         window?.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         onDispose { window?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }

@@ -83,7 +83,11 @@ class Relay(
             send.id.isEmpty() || send.id.length > MAX_ID_LENGTH -> "Invalid message ID."
             send.ciphertext.length > MAX_CIPHERTEXT_LENGTH -> "Message is too large."
             !send.ciphertext.startsWith(PGP_MESSAGE_HEADER) -> "Messages must be PGP encrypted."
-            registry.get(send.to) == null -> "${send.to} hasn't used Cosmo chat yet."
+            // Someone who hasn't connected since the server started can still have a key in
+            // Supabase, which is where the sender found it; their messages wait in the queue.
+            !HelloVerifier.isCosmoId(send.to) -> "That isn't a valid Cosmo ID."
+            registry.get(send.to) == null && !offline.containsKey(send.to) && offline.size >= MAX_QUEUED_RECIPIENTS ->
+                "The chat server's queue is full. Try again when ${send.to} is online."
             else -> null
         }
         if (error != null) {
@@ -138,6 +142,8 @@ class Relay(
         // Room for marketplace deliveries (up to 48 KB of goods, encrypted twice) as well as chat.
         const val MAX_CIPHERTEXT_LENGTH = 100 * 1024
         const val MAX_QUEUED_PER_USER = 100
+        // Bounds the memory that messages to made-up IDs can take.
+        const val MAX_QUEUED_RECIPIENTS = 10_000
         const val MAX_CLOSE_REASON_LENGTH = 120 // Close reasons are limited to 123 bytes.
         const val PGP_MESSAGE_HEADER = "-----BEGIN PGP MESSAGE-----"
     }

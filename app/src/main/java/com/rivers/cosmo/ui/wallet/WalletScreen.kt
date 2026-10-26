@@ -59,7 +59,7 @@ fun WalletDashboard(
         modifier = modifier,
         header = { layout, editing, update ->
             if (banner.style != BannerStyle.Off) {
-                WalletBanner(banner, network, layout, editing, onMove = { id, position -> update(layout.moveBannerItem(id, position)) })
+                WalletBanner(banner, network, layout, editing, onLayoutChange = update)
             }
         }
     )

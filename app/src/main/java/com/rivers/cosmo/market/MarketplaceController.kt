@@ -2,15 +2,14 @@ package com.rivers.cosmo.market
 
 import android.content.Context
 import com.rivers.cosmo.chat.ChatService
+import com.rivers.cosmo.util.backgroundScope
 import com.rivers.cosmo.wallet.Escrow
 import com.rivers.cosmo.wallet.StellarAddress
 import com.rivers.cosmo.wallet.StellarNetwork
 import com.rivers.cosmo.wallet.WalletController
 import java.math.BigDecimal
 import java.util.UUID
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -53,7 +52,7 @@ class MarketplaceController(
     )
 
     private val store = MarketStore(context, userId, network.name.lowercase())
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = backgroundScope("marketplace", Dispatchers.IO)
     private val lock = Mutex()
     private val retried = java.util.Collections.synchronizedSet(mutableSetOf<String>())
     private val _state = MutableStateFlow(State(myListings = store.listings(), orders = store.orders().sortedByDescending { it.createdAt }))

@@ -68,7 +68,9 @@ fun SettingsScreen(
     /** The font picker (built-in and added fonts), which needs the font store. */
     fonts: @Composable () -> Unit = {},
     /** Share and import buttons for the theme. */
-    themeSharing: @Composable () -> Unit = {}
+    themeSharing: @Composable () -> Unit = {},
+    /** Whether Android lets Cosmo show notifications. */
+    notificationsPermitted: Boolean = true
 ) {
     fun section(id: String, title: String, content: @Composable () -> Unit) = DashboardModule(id, title) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -104,6 +106,15 @@ fun SettingsScreen(
                 network = settings.stellarNetwork,
                 domains = settings.anchors.forNetwork(settings.stellarNetwork),
                 onChange = { onSettingsChange(settings.copy(anchors = settings.anchors.with(settings.stellarNetwork, it))) }
+            )
+        },
+        section("notifications", "Notifications") {
+            NotificationsSection(settings = settings, permitted = notificationsPermitted, onChange = onSettingsChange)
+        },
+        section("privacy", "Privacy") {
+            PrivacySection(
+                allowScreenCapture = settings.allowScreenCapture,
+                onChange = { onSettingsChange(settings.copy(allowScreenCapture = it)) }
             )
         },
         section("network", "Stellar network") {

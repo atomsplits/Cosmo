@@ -1,5 +1,6 @@
 -- Public PGP keys for Cosmo chat, one per Cosmo ID.
--- Not used yet: the chat relay (server/) keeps this mapping in memory for now.
+-- The app publishes its key here through publish_public_key (…_publish_public_key.sql) and
+-- looks contacts up here when the chat server doesn't know them.
 -- Apply with the Supabase CLI: supabase db push. Safe to run more than once.
 
 create table if not exists public.public_keys (

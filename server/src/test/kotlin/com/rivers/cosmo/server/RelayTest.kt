@@ -60,6 +60,22 @@ class RelayTest {
     }
 
     @Test
+    fun queuesMessagesForUsersWhoHaventConnectedYet() = relayTest { client ->
+        // Bob's key came from Supabase; he hasn't connected since the server started.
+        val aliceSession = client.logIn(aliceId, alice)
+        val ciphertext = Pgp.encryptAndSign("found you in the directory", Pgp.publicKeyOf(bob), alice)
+        aliceSession.sendClient(ClientFrame.Send("m4", bobId, ciphertext))
+        assertEquals(ServerFrame.Sent("m4", delivered = false), aliceSession.receive())
+
+        aliceSession.sendClient(ClientFrame.Send("m5", "not-a-cosmo-id", ciphertext))
+        assertEquals("That isn't a valid Cosmo ID.", assertIs<ServerFrame.Error>(aliceSession.receive()).message)
+
+        val bobSession = client.logIn(bobId, bob)
+        val received = assertIs<ServerFrame.Message>(bobSession.receive())
+        assertEquals("found you in the directory", Pgp.decryptAndVerify(received.ciphertext, bob, null).text)
+    }
+
+    @Test
     fun rejectsAnotherKeyClaimingARegisteredId() = relayTest { client ->
         client.logIn(aliceId, alice).close()
         val impostor = Pgp.generateKey(aliceId)

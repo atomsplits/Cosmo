@@ -1,17 +1,18 @@
 package com.rivers.cosmo.chat
 
 import android.content.Context
+import android.util.Log
 import com.rivers.cosmo.chat.crypto.KeyVault
 import com.rivers.cosmo.chat.crypto.Pgp
 import com.rivers.cosmo.market.Listing
 import com.rivers.cosmo.market.MarketProtocol
+import com.rivers.cosmo.util.backgroundScope
 import java.util.UUID
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.TimeUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -39,11 +40,18 @@ import org.bouncycastle.openpgp.PGPSecretKeyRing
  * On [start] it loads (or generates) the user's PGP key, connects to the relay at [serverUrl] and
  * proves it owns that key. Messages are encrypted to the recipient and signed before they leave
  * the phone, so the relay only ever sees ciphertext. Conversations are kept in memory for now.
+ *
+ * With a [keyServer] (Supabase), the user's public key is also published there, signed off with
+ * [accountVerifier], and contacts the relay doesn't know (offline, or since it restarted) are
+ * looked up there.
  */
 class ChatService(
     context: Context,
     private val userId: String,
-    private val serverUrl: String
+    private val serverUrl: String,
+    private val keyServer: ChatKeyServer? = null,
+    /** The account's phrase verifier, for publishing to [keyServer]; null if it can't be worked out. */
+    private val accountVerifier: suspend () -> String? = { null }
 ) {
     enum class Connection { Connecting, Online, Offline }
 
@@ -65,7 +73,9 @@ class ChatService(
         val fingerprint: String?,
         /** Set when the server offered a different key than the one pinned for this contact. */
         val keyChanged: Boolean = false,
-        val messages: List<ChatMessage> = emptyList()
+        val messages: List<ChatMessage> = emptyList(),
+        /** Received messages that arrived while this conversation wasn't open. */
+        val unread: Int = 0
     )
 
     data class State(
@@ -77,7 +87,7 @@ class ChatService(
 
     private val vault = KeyVault(context)
     private val contacts = ContactKeys(context)
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val scope = backgroundScope("chat", Dispatchers.Default)
     private val client = OkHttpClient.Builder().pingInterval(20, TimeUnit.SECONDS).build()
     private val pendingKeyRequests = ConcurrentHashMap<String, CompletableDeferred<String?>>()
     private val pendingListings = ConcurrentHashMap<String, CompletableDeferred<List<Listing>>>()
@@ -85,15 +95,19 @@ class ChatService(
 
     /** Marketplace messages from other users, as (sender's Cosmo ID, text). Only ones with a verified signature arrive. */
     val marketMessages: SharedFlow<Pair<String, String>> = _marketMessages.asSharedFlow()
+    private val _newMessages = MutableSharedFlow<ChatMessage>(extraBufferCapacity = 64)
+
+    /** Received chat messages for conversations that aren't open on screen, for notifications. */
+    val newMessages: SharedFlow<ChatMessage> = _newMessages.asSharedFlow()
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
 
     @Volatile private var socket: WebSocket? = null
     @Volatile private var stopReconnecting = false
+    @Volatile private var viewing: String? = null
     private lateinit var ownKey: PGPSecretKeyRing
 
-    // TODO: Swap for a Supabase-backed directory once public keys are stored there.
-    private val keyDirectory = PublicKeyDirectory { cosmoId -> fetchKeyFromRelay(cosmoId) }
+    private val keyDirectory = PublicKeyDirectory { cosmoId -> fetchKey(cosmoId) }
 
     fun start() {
         scope.launch {
@@ -104,6 +118,7 @@ class ChatService(
                 return@launch
             }
             _state.update { it.copy(ownFingerprint = Pgp.fingerprint(Pgp.publicKeyOf(ownKey))) }
+            launch { publishKey() }
             connectLoop()
         }
     }
@@ -122,20 +137,39 @@ class ChatService(
         client.dispatcher.executorService.shutdown()
     }
 
+    /**
+     * Tells the service which conversation is on screen (null for none): it's marked read, and its
+     * new messages don't count as unread or show notifications.
+     */
+    fun setViewing(contactId: String?) {
+        viewing = contactId
+        if (contactId != null) markRead(contactId)
+    }
+
+    fun markRead(contactId: String) {
+        _state.update { state ->
+            val conversation = state.conversations[contactId]
+            if (conversation == null || conversation.unread == 0) state
+            else state.copy(conversations = state.conversations + (contactId to conversation.copy(unread = 0)))
+        }
+    }
+
     /** Looks up [contactId]'s key and checks it against the pinned one, then opens the conversation. */
     suspend fun openConversation(contactId: String): Result<Unit> = runCatching {
         require(contactId != userId) { "That's your own Cosmo ID." }
         if (state.value.conversations[contactId]?.keyChanged == false) return@runCatching
 
-        val armoredKey = keyDirectory.fetch(contactId)
-            ?: throw IllegalStateException("$contactId hasn't used Cosmo chat yet.")
+        val armoredKey = keyDirectory.fetch(contactId) ?: throw IllegalStateException(
+            "$contactId hasn't set up Cosmo chat yet. They need to open Cosmo and connect to chat once before you can message them."
+        )
         val conversation = when (val pin = contacts.pin(contactId, armoredKey)) {
             is ContactKeys.PinResult.Trusted -> Conversation(contactId, pin.fingerprint)
             is ContactKeys.PinResult.Changed -> Conversation(contactId, pin.newFingerprint, keyChanged = true)
         }
         _state.update { state ->
             val existing = state.conversations[contactId]
-            state.copy(conversations = state.conversations + (contactId to conversation.copy(messages = existing?.messages.orEmpty())))
+            val merged = conversation.copy(messages = existing?.messages.orEmpty(), unread = existing?.unread ?: 0)
+            state.copy(conversations = state.conversations + (contactId to merged))
         }
     }
 
@@ -250,7 +284,7 @@ class ChatService(
         } finally {
             if (socket === webSocket) socket = null
             webSocket.cancel()
-            pendingKeyRequests.values.forEach { it.complete(null) }
+            pendingKeyRequests.values.forEach { it.completeExceptionally(IllegalStateException("Lost the connection to the chat server.")) }
             pendingKeyRequests.clear()
         }
         return loggedIn
@@ -277,10 +311,44 @@ class ChatService(
                 it.copy(conversations = it.conversations + (frame.from to Conversation(frame.from, senderKey?.let(Pgp::fingerprint))))
             }
         }
-        addMessage(
-            frame.from,
-            ChatMessage(frame.id, frame.from, decrypted.text, frame.sentAt, outgoing = false, Status.Received, decrypted.verified)
-        )
+        val message = ChatMessage(frame.id, frame.from, decrypted.text, frame.sentAt, outgoing = false, Status.Received, decrypted.verified)
+        val unseen = frame.from != viewing
+        if (addMessage(frame.from, message, countUnread = unseen) && unseen) _newMessages.emit(message)
+    }
+
+    /** Publishes this device's chat key to [keyServer], so contacts can find it while we're offline. */
+    private suspend fun publishKey() {
+        val server = keyServer ?: return
+        try {
+            val verifier = withContext(Dispatchers.Default) { accountVerifier() } ?: return
+            val publicKey = Pgp.publicKeyOf(ownKey)
+            val fingerprint = Pgp.fingerprint(publicKey).filterNot { it.isWhitespace() }.uppercase()
+            if (!server.publish(userId, verifier, fingerprint, Pgp.armor(publicKey))) {
+                Log.w(TAG, "Supabase didn't accept the chat key for $userId (no account there?)")
+            }
+        } catch (e: Exception) {
+            // Chat still works through the relay; contacts just can't find this key while we're offline.
+            Log.w(TAG, "Couldn't publish the chat key", e)
+        }
+    }
+
+    /**
+     * Finds [cosmoId]'s public key: first from the relay (which knows everyone connected since it
+     * started), then from [keyServer]. Null means nobody has a key for them; throws if neither
+     * could be asked.
+     */
+    private suspend fun fetchKey(cosmoId: String): String? {
+        val fromRelay = runCatching { fetchKeyFromRelay(cosmoId) }
+        fromRelay.exceptionOrNull()?.let { if (it is CancellationException) throw it }
+        fromRelay.getOrNull()?.let { return it }
+        val server = keyServer ?: return fromRelay.getOrThrow()
+        return try {
+            server.fetch(cosmoId)
+        } catch (e: Exception) {
+            if (e is CancellationException) throw e
+            // If the relay couldn't be asked either, that's usually the problem to fix first.
+            throw fromRelay.exceptionOrNull() ?: e
+        }
     }
 
     private suspend fun fetchKeyFromRelay(cosmoId: String): String? {
@@ -288,15 +356,22 @@ class ChatService(
         val request = pendingKeyRequests.getOrPut(cosmoId) { CompletableDeferred() }
         webSocket.send(ChatProtocol.getKey(cosmoId))
         return withTimeoutOrNull(KEY_REQUEST_TIMEOUT_MS) { request.await() }
+            ?: if (request.isCompleted) null else throw IllegalStateException("The chat server didn't answer.")
     }
 
-    private fun addMessage(contactId: String, message: ChatMessage) {
+    /** Adds [message] to its conversation. Returns false if it was already there. */
+    private fun addMessage(contactId: String, message: ChatMessage, countUnread: Boolean = false): Boolean {
+        var added = false
         _state.update { state ->
+            added = false
             val conversation = state.conversations[contactId] ?: return@update state
             if (conversation.messages.any { it.id == message.id }) return@update state
+            added = true
             val messages = (conversation.messages + message).sortedBy { it.sentAt }
-            state.copy(conversations = state.conversations + (contactId to conversation.copy(messages = messages)))
+            val unread = if (countUnread) conversation.unread + 1 else conversation.unread
+            state.copy(conversations = state.conversations + (contactId to conversation.copy(messages = messages, unread = unread)))
         }
+        return added
     }
 
     private fun setStatus(messageId: String, status: Status) {
@@ -308,6 +383,7 @@ class ChatService(
     }
 
     private companion object {
+        const val TAG = "Cosmo"
         const val NORMAL_CLOSURE = 1000
         const val INITIAL_BACKOFF_MS = 2_000L
         const val MAX_BACKOFF_MS = 30_000L

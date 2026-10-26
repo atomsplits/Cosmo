@@ -38,4 +38,25 @@ class BannerGridTest {
         assertEquals(true, old.snapToGrid)
         assertEquals(emptyMap<String, BannerPosition>(), old.banner)
     }
+
+    @Test
+    fun resizesWithinLimitsOnTheGrid() {
+        assertEquals(176f, BannerGrid.height(170f, snap = true))
+        assertEquals(170f, BannerGrid.height(170f, snap = false))
+        assertEquals(BannerGrid.MIN_HEIGHT_DP, BannerGrid.height(10f, snap = true))
+        assertEquals(BannerGrid.MAX_HEIGHT_DP, BannerGrid.height(5000f, snap = false))
+    }
+
+    @Test
+    fun savesTheBannerHeightAndTitleAlignment() {
+        val layout = DashboardLayout(bannerHeight = 208f, titleAlign = BannerTextAlign.Center)
+        val restored = DashboardLayout.fromJson(layout.toJson())
+        assertEquals(208f, restored.bannerHeight)
+        assertEquals(BannerTextAlign.Center, restored.titleAlign)
+        // Older layouts keep the default height and left alignment; out-of-range heights are clamped.
+        val old = DashboardLayout.fromJson("""{"placements":{},"hidden":[],"order":[]}""")
+        assertEquals(null, old.bannerHeight)
+        assertEquals(BannerTextAlign.Start, old.titleAlign)
+        assertEquals(BannerGrid.MAX_HEIGHT_DP, DashboardLayout.fromJson("""{"bannerHeight":9999}""").bannerHeight)
+    }
 }

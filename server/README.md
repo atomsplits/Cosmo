@@ -58,13 +58,16 @@ is the user's Cosmo ID.
    key, and the challenge signed with its secret key. The server checks that the key is named for
    that Cosmo ID and that the signature is valid. The first key to log in with a Cosmo ID claims it;
    after that, any other key is refused for that ID.
-2. **Look up a contact.** The app asks for the contact's public key. The app pins the first key it
-   sees for each contact and refuses to send if the server later offers a different one.
+2. **Look up a contact.** The app asks the server for the contact's public key, and if the server
+   doesn't know it (the contact hasn't connected since the server started), looks it up in
+   Supabase, where every app publishes its key when chat starts. The app pins the first key it
+   sees for each contact and refuses to send if a different one turns up later.
 3. **Send.** The app encrypts the message to the recipient and to itself, signs it, and sends the
-   ciphertext. The server forwards it, or queues up to 100 messages while the recipient is offline.
+   ciphertext. The server forwards it, or queues up to 100 messages while the recipient is offline
+   (including recipients it hasn't seen yet).
 
-Keys and queued messages are kept in memory, so they're lost when the server restarts.
-`supabase/migrations` has the table that will store public keys permanently.
+Keys and queued messages are kept in memory, so they're lost when the server restarts. Public keys
+are also in Supabase (`supabase/migrations`), so lookups keep working after a restart.
 
 ## Protocol
 

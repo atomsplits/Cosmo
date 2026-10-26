@@ -35,9 +35,21 @@ data class ModulePlacement(val x: Float, val y: Float, val width: Float, val sca
 /** Where an item in the banner (the logo, the title) sits: its top-left corner, in dp. */
 data class BannerPosition(val x: Float, val y: Float)
 
+/** How the banner's title lines ("Cosmo" and the network) line up with each other and the banner. */
+enum class BannerTextAlign { Start, Center, End }
+
 /** The grid that banner items snap to in edit mode. */
 object BannerGrid {
     const val STEP_DP = 16f
+    const val DEFAULT_HEIGHT_DP = 140f
+    const val MIN_HEIGHT_DP = 80f
+    const val MAX_HEIGHT_DP = 320f
+
+    /** A banner height dragged to [height] dp: within the limits, and on the grid when [snap] is on. */
+    fun height(height: Float, snap: Boolean): Float {
+        val snapped = if (snap) (height / STEP_DP).roundToInt() * STEP_DP else height
+        return snapped.coerceIn(MIN_HEIGHT_DP, MAX_HEIGHT_DP)
+    }
 
     /**
      * Where an item of [itemWidth]×[itemHeight] dragged to ([x], [y]) ends up in a banner of
@@ -69,7 +81,10 @@ data class DashboardLayout(
     /** Positions of items the user moved in the banner, by id ("logo", "title"); others use their defaults. */
     val banner: Map<String, BannerPosition> = emptyMap(),
     /** Whether banner items snap to [BannerGrid] while being moved. */
-    val snapToGrid: Boolean = true
+    val snapToGrid: Boolean = true,
+    /** The banner's height in dp, or null for [BannerGrid.DEFAULT_HEIGHT_DP]. */
+    val bannerHeight: Float? = null,
+    val titleAlign: BannerTextAlign = BannerTextAlign.Start
 ) {
     fun moveBannerItem(id: String, position: BannerPosition) = copy(banner = banner + (id to position))
 
@@ -109,6 +124,8 @@ data class DashboardLayout(
             banner.forEach { (id, p) -> put(id, JSONObject().put("x", p.x.toDouble()).put("y", p.y.toDouble())) }
         })
         .put("snapToGrid", snapToGrid)
+        .put("bannerHeight", bannerHeight?.toDouble() ?: JSONObject.NULL)
+        .put("titleAlign", titleAlign.name)
         .toString()
 
     companion object {
@@ -135,7 +152,12 @@ data class DashboardLayout(
                     val p = bannerJson.getJSONObject(id)
                     BannerPosition(p.getDouble("x").toFloat(), p.getDouble("y").toFloat())
                 }
-                DashboardLayout(placements, strings("hidden").toSet(), strings("order"), fonts, banner, root.optBoolean("snapToGrid", true))
+                DashboardLayout(
+                    placements, strings("hidden").toSet(), strings("order"), fonts, banner, root.optBoolean("snapToGrid", true),
+                    bannerHeight = if (root.isNull("bannerHeight")) null else root.getDouble("bannerHeight").toFloat()
+                        .coerceIn(BannerGrid.MIN_HEIGHT_DP, BannerGrid.MAX_HEIGHT_DP),
+                    titleAlign = BannerTextAlign.entries.firstOrNull { it.name == root.optString("titleAlign") } ?: BannerTextAlign.Start
+                )
             }.getOrDefault(DashboardLayout())
         }
     }

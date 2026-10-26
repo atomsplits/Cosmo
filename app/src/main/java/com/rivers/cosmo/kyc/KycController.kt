@@ -4,10 +4,9 @@ import com.rivers.cosmo.anchor.AnchorException
 import com.rivers.cosmo.anchor.AnchorService
 import com.rivers.cosmo.anchor.Sep12
 import com.rivers.cosmo.anchor.Upload
-import kotlinx.coroutines.CoroutineScope
+import com.rivers.cosmo.util.backgroundScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,7 +33,7 @@ class KycController(private val anchors: AnchorService, anchorDomains: List<Stri
         val status: KycStatus? get() = customer?.status
     }
 
-    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private val scope = backgroundScope("identity verification", Dispatchers.IO)
     private val _state = MutableStateFlow(State(domains = anchorDomains, domain = anchorDomains.firstOrNull()))
     val state: StateFlow<State> = _state.asStateFlow()
     private var loadJob: Job? = null
