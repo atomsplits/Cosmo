@@ -1,3 +1,6 @@
+import java.util.Base64
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
@@ -6,7 +9,7 @@ plugins {
 // Supabase connection details, kept out of git: set supabase.url and supabase.anonKey in
 // local.properties (or SUPABASE_URL / SUPABASE_ANON_KEY in the environment, e.g. on CI).
 // Without them the app keeps accounts on the device only.
-val localProperties = java.util.Properties().apply {
+val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 fun buildSetting(property: String, environment: String): String =
@@ -36,7 +39,7 @@ fun checkSupabaseKey(key: String, url: String) {
     if (key.startsWith("sb_secret_")) throw GradleException("supabase.anonKey is a secret key. Use the anon (or publishable) key: secret keys bypass all security and must never be in the app.")
     val parts = key.split('.')
     if (parts.size != 3) return // a new-style publishable key (sb_publishable_…)
-    val payload = runCatching { String(java.util.Base64.getUrlDecoder().decode(parts[1])) }.getOrNull()
+    val payload = runCatching { String(Base64.getUrlDecoder().decode(parts[1])) }.getOrNull()
         ?: throw GradleException("supabase.anonKey isn't a valid key. Copy the anon key from Project Settings → API.")
     val role = Regex(""""role"\s*:\s*"([^"]+)"""").find(payload)?.groupValues?.get(1)
     if (role != "anon") throw GradleException("supabase.anonKey has role '$role'. Use the anon key, never service_role: it bypasses all security and must never be in the app.")
