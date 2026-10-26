@@ -107,6 +107,34 @@ android {
     }
 }
 
+// The example plugins in docs/plugins/examples ship inside the app (assets/plugin-examples), so
+// Settings → Plugins can install them in one tap. Copied at build time so there's one copy to edit.
+abstract class BundlePluginExamples : DefaultTask() {
+    @get:InputDirectory
+    abstract val examples: DirectoryProperty
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun copy() {
+        val target = output.get().asFile.resolve("plugin-examples")
+        target.deleteRecursively()
+        target.mkdirs()
+        examples.get().asFile.listFiles { file -> file.extension == "js" }?.forEach { it.copyTo(target.resolve(it.name)) }
+    }
+}
+
+val bundlePluginExamples = tasks.register<BundlePluginExamples>("bundlePluginExamples") {
+    examples.set(rootProject.layout.projectDirectory.dir("docs/plugins/examples"))
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(bundlePluginExamples, BundlePluginExamples::output)
+    }
+}
+
 // Compile with a full JDK 17, found on the computer or downloaded by Gradle. Without this the
 // build uses whatever Java runs Gradle; IDE-bundled runtimes (like IntelliJ's JBR) can lack
 // jlink, which the Android build needs ("jlink executable … does not exist").

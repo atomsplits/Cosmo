@@ -90,7 +90,7 @@ import kotlinx.coroutines.withContext
 private enum class MainTab(val label: String, val icon: ImageVector) {
     Wallet("Wallet", Icons.Filled.AccountBalanceWallet),
     Payments("Payments", Icons.Filled.Payments),
-    Transfers("Transfers", Icons.Filled.SwapHoriz),
+    Transfers("Move", Icons.Filled.SwapHoriz),
     Marketplace("Market", Icons.Filled.Storefront),
     Chat("Chat", Icons.AutoMirrored.Filled.Chat),
     Settings("Settings", Icons.Filled.Settings)

@@ -7,6 +7,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -14,6 +16,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -41,6 +44,14 @@ import kotlinx.coroutines.withContext
 
 private data class PendingScript(val name: String, val source: String)
 
+/** An example plugin bundled with the app (docs/plugins/examples, copied into assets at build time). */
+private data class ExamplePlugin(val name: String, val file: String, val description: String)
+
+private val EXAMPLES = listOf(
+    ExamplePlugin("XLM price", "xlm-price.js", "The live XLM price, its 24-hour chart, what your balance is worth, and price alerts."),
+    ExamplePlugin("Cosmo pet", "cosmo-pet.js", "Nova, a little moon to feed, play with and put to bed. It cheers up when you get paid.")
+)
+
 /** Lets the user import, enable, disable and remove JavaScript plugins. */
 @Composable
 fun PluginsSection(
@@ -54,6 +65,7 @@ fun PluginsSection(
     val scope = rememberCoroutineScope()
     var pending by remember { mutableStateOf<PendingScript?>(null) }
     var pasting by rememberSaveable { mutableStateOf(false) }
+    var choosing by rememberSaveable { mutableStateOf(false) }
     var installing by remember { mutableStateOf(false) }
     var removing by remember { mutableStateOf<PluginHost.PluginState?>(null) }
 
@@ -81,7 +93,7 @@ fun PluginsSection(
             style = MaterialTheme.typography.bodySmall
         )
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            Button(onClick = { picker.launch(arrayOf("*/*")) }, enabled = !installing) { Text("Import script") }
+            Button(onClick = { choosing = true }, enabled = !installing) { Text("Import script") }
             OutlinedButton(onClick = { pasting = true }, enabled = !installing) { Text("Paste script") }
         }
         plugins.forEach { state ->
@@ -96,6 +108,31 @@ fun PluginsSection(
                 }
             }
         }
+    }
+
+    if (choosing) {
+        ImportScriptDialog(
+            installed = plugins.map { it.plugin.name }.toSet(),
+            installing = installing,
+            onAddExample = { example ->
+                installing = true
+                scope.launch {
+                    runCatching {
+                        withContext(Dispatchers.IO) {
+                            context.assets.open("plugin-examples/${example.file}").use { it.readBytes().toString(Charsets.UTF_8) }
+                        }
+                    }.mapCatching { source -> onInstall(example.name, source).getOrThrow() }
+                        .onSuccess { onMessage("Added ${example.name}. Its widget is on your Wallet tab.") }
+                        .onFailure { onMessage("Couldn't add ${example.name}: ${it.message}") }
+                    installing = false
+                }
+            },
+            onOpenFile = {
+                choosing = false
+                picker.launch(arrayOf("*/*"))
+            },
+            onDismiss = { choosing = false }
+        )
     }
 
     if (pasting) {
@@ -149,6 +186,49 @@ fun PluginsSection(
             dismissButton = { TextButton(onClick = { removing = null }) { Text("Cancel") } }
         )
     }
+}
+
+/** Import script: one-tap example widgets, or a .js file from the device. */
+@Composable
+private fun ImportScriptDialog(
+    installed: Set<String>,
+    installing: Boolean,
+    onAddExample: (ExamplePlugin) -> Unit,
+    onOpenFile: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Import script") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text("Examples", style = MaterialTheme.typography.labelLarge)
+                EXAMPLES.forEach { example ->
+                    val added = example.name in installed
+                    Card(Modifier.fillMaxWidth()) {
+                        Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(example.name, style = MaterialTheme.typography.titleSmall)
+                                Text(example.description, style = MaterialTheme.typography.bodySmall)
+                            }
+                            Spacer(Modifier.width(8.dp))
+                            if (added) {
+                                Text("Added", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            } else {
+                                FilledTonalButton(onClick = { onAddExample(example) }, enabled = !installing) { Text("Add") }
+                            }
+                        }
+                    }
+                }
+                Text(
+                    "Or open a .js file from your device. Only install scripts from people you trust.",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = onOpenFile, enabled = !installing) { Text("Open file…") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Close") } }
+    )
 }
 
 @Composable
